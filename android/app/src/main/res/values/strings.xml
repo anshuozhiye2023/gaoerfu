@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">捡球机器人</string>
+    <string name="need_ble_permission">需要蓝牙权限才能连接机器人</string>
+    <string name="need_location_permission">需要定位权限才能在地图上显示当前位置</string>
+    <string name="connection_lost">与机器人的连接已断开</string>
+</resources>

@@ -1,0 +1,9 @@
+// 顶层构建脚本：只声明插件版本，不 apply。
+plugins {
+    id 'com.android.application' version '8.7.2' apply false
+}
+
+// 构建产物统一放这里，方便脚本取 APK。
+tasks.register('cleanAll', Delete) {
+    delete rootProject.layout.buildDirectory
+}

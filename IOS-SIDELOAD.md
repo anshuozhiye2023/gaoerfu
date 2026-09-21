@@ -1,0 +1,93 @@
+# iOS：从 push 代码到装上 iPhone（全程不需要 Mac）
+
+## 〇、总览
+
+```
+你 push 代码 → GitHub 云端 Mac 自动编译 → 下载「未签名 ipa」
+    → Windows 上用 Sideloadly 签上你的 Apple ID → 数据线装进 iPhone
+```
+
+编译环节完全自动化；签名环节目前必须在你自己的 Windows 上做一次（几分钟），
+原因见 §四「为什么签名不放进 CI」。
+
+## 一、把仓库推上 GitHub（一次性）
+
+```bash
+cd GolfAppNative
+git init                                  # 本机已经执行过，重复执行无害
+git add -A
+git commit -m "iOS 云端编译流水线"
+
+# 在 github.com 上新建一个**私有**仓库（不要选初始化 README），然后：
+git remote add origin https://github.com/<你的用户名>/<仓库名>.git
+git branch -M main
+git push -u origin main
+```
+
+> **务必建私有仓库**——里面是产品源码。
+
+## 二、看编译结果
+
+push 之后：
+
+1. 仓库页面 → **Actions** 标签 → 点最新一次 run；
+2. 全绿后页面右侧 **Artifacts** → 下载 `GolfApp-unsigned-ipa`；
+3. 解压得到 `GolfApp-unsigned.ipa`。
+
+以后每次改 `ios/` 下的东西并 push，都会自动重新出包；也可以在
+Actions 页面右上角 **Run workflow** 手动触发。
+
+编译失败先看日志的第一红行。常见两种：
+- `xcodegen generate` 报 yml 语法错 → 本地装 XcodeGen 复现一遍再修；
+- Swift 编译错 → 日志会给出文件与行号，改完 push 即可。
+
+## 三、把 ipa 装进 iPhone（免费 Apple ID 路线）
+
+1. Windows 上装 **Sideloadly**（https://sideloadly.io ，免费）；
+2. iPhone 用数据线连电脑，装好 iTunes 相关驱动（Sideloadly 首次会提示）；
+3. Sideloadly 里：拖入 `GolfApp-unsigned.ipa` → 填你的 Apple ID → Start；
+4. iPhone 上：设置 → 通用 → VPN与设备管理 → 信任你的开发者证书；
+5. 桌面出现「捡球机器人」。
+
+**限制（苹果对免费账号的硬性规定，谁都绕不开）：**
+
+| 限制 | 说明 |
+|---|---|
+| **7 天有效期** | 第 7 天后 App 打不开，数据线重签一次即可（设置和圈地数据不受影响，存在 App 沙盒里） |
+| 每账号最多 3 个自签 App | 只装这一个就无所谓 |
+| 不能分发给别人的手机 | 想给别人装 → 见 §五 |
+
+**不想总插线的替代**：用 **AltStore**（altstore.io），在 iPhone 上装个
+AltStore 客户端后，手机和电脑同一 Wi-Fi 时会**自动后台重签**，基本可以忘了 7 天这回事。
+SideStore（AltStore 的去电脑化分支）连电脑都可以省，但配网较折腾。
+
+## 四、为什么签名不放进 CI
+
+把签名放进 CI 需要：p12 证书 + 描述文件 + 存进 GitHub Secrets。能做，但：
+
+- 免费 Apple ID 的证书**每 7 天过期**，CI 签出来的包存多久都没意义；
+- 真正值得进 CI 的签名是付费账号的（见 §五），那一步目前还没有账号支撑；
+- Sideloadly 在本地签名就 2 分钟，先把流程跑通，别为还没买的东西建基础设施。
+
+## 五、买了开发者账号（¥688/年）之后的分发升级
+
+| 想给谁装 | 用什么 | 要不要 UDID | 有效期 |
+|---|---|---|---|
+| 自己 + 少数固定设备 | Ad-hoc（CI 里真签名） | 要，每人报 UDID，年 100 台 | 1 年 |
+| 十人以上内测 | **TestFlight（推荐）** | 不要，对方装 TestFlight 点链接 | 90 天/版 |
+| App Store 公开上架 | 走审核 | — | 常驻 |
+
+到那时把 `project.yml` 的 `DEVELOPMENT_TEAM` 填上 Team ID，工作流里
+把 `CODE_SIGNING_ALLOWED=NO` 换成证书解密 + `xcodebuild -exportArchive`
+即可——需要时说一声，我再把签名版工作流写上。
+
+## 六、iOS 侧已经替你配好的东西
+
+- **XcodeGen 工程描述**（`ios/project.yml`）：CI 上先 `xcodegen generate` 再编译，
+  仓库里永远没有 .xcodeproj；
+- **权限描述**（`Info.plist`）：蓝牙/定位三条 usage 缺一条 iOS 直接崩，已写好中文说明；
+- **明文 http 放行**：底图源可自填，内网 http 瓦片服务不再被静默拦截
+  （与 Android 的 `network_security_config.xml` 行为一致）；
+- **部署目标 iOS 14**：WKWebView + CoreBluetooth 够用，老机型也能装；
+- 工作流里有一条**包内 H5 校验**：解包 ipa 对比 `index.html` 的 SHA-256 与仓库一致，
+  防止哪天同步断链、编出一个旧版界面。

@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.golfrobot.pickapp'
+    compileSdk 35
+
+    // 必须显式指定：AGP 8.7 的默认值是 34.0.0，而本机 SDK 里装的是 36.1.0 / 37.0.0，
+    // 不写这一行会报 "Failed to find Build Tools revision 34.0.0"。
+    // 换到别的机器时，改成 sdkmanager --list 里实际装着的那个版本。
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        applicationId 'com.golfrobot.pickapp'
+        minSdk 24              // Android 7.0；BLE 与 WebView 现代 API 都够
+        targetSdk 35           // 上架 Google Play 的硬性要求（2026 年要求 35+）
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.debug'      // 和正式版共存，便于对比
+            versionNameSuffix '-debug'
+        }
+        release {
+            // 不混淆：工程零第三方依赖，混淆收益为零、踩坑风险不小。
+            minifyEnabled false
+            shrinkResources false
+            // 正式签名见 BUILD.md（用命令行 -P 传 keystore，不把密码写进仓库）
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false       // 内测阶段别因为提示性 lint 卡住构建
+    }
+}

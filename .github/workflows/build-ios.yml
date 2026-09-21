@@ -1,0 +1,68 @@
+name: build-ios
+
+# 云端 macOS 上把 iOS 壳编译成「未签名 ipa」。
+# 未签名 ipa 拿到 Windows 上用 Sideloadly / AltStore 签自己的 Apple ID 就能装；
+# 有付费开发者账号后，见 IOS-SIDELOAD.md 的「正式签名」一节再切真签名。
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:      # 手动触发按钮
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode 版本（留档排查用）
+        run: xcodebuild -version
+
+      - name: 生成 Xcode 工程（XcodeGen）
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+          xcodebuild -list
+
+      # 未签名编译：CODE_SIGNING_ALLOWED=NO 让 CI 上没有证书也能出包。
+      # 不用 -scheme（XcodeGen 默认不一定生成 scheme），直接 -target 最稳。
+      # 注意：Actions 默认 shell 没有 pipefail，不加上「编译失败但管道吃掉退出码」会假绿。
+      - name: 编译（Release / 真机 arm64 / 未签名）
+        run: |
+          set -o pipefail
+          cd ios
+          xcodebuild -project GolfApp.xcodeproj \
+            -target GolfApp -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tail -40
+
+      - name: 打包成 ipa
+        run: |
+          APP=$(find ios/build/Build/Products -type d -name "*.app" | head -1)
+          echo "找到 app: $APP"
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry GolfApp-unsigned.ipa Payload
+          # 校验：ipa 就是个 zip，解开必须能看到主二进制和 H5
+          unzip -l GolfApp-unsigned.ipa | grep -E "GolfApp$|index.html"
+          ls -lh GolfApp-unsigned.ipa
+
+      - name: 校验包内 H5 与仓库一致（防止哪天拷贝断了）
+        run: |
+          H5_IN_PAYLOAD=$(unzip -p GolfApp-unsigned.ipa "Payload/GolfApp.app/index.html" | shasum -a 256 | cut -d' ' -f1)
+          H5_IN_REPO=$(shasum -a 256 ios/GolfApp/index.html | cut -d' ' -f1)
+          echo "包内: $H5_IN_PAYLOAD"
+          echo "仓库: $H5_IN_REPO"
+          test "$H5_IN_PAYLOAD" = "$H5_IN_REPO"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GolfApp-unsigned-ipa
+          path: GolfApp-unsigned.ipa
+          retention-days: 30

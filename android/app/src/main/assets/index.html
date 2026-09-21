@@ -1,0 +1,3961 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#f5f7fa">
+<title>球场控制台 · H5 原型</title>
+<style>
+:root{
+  --bg:#f5f7fa; --panel:#fff; --line:#d9e1ea; --text:#12212e; --muted:#647689;
+  --brand:#1668d6; --brand-soft:#e8f1fd; --ok:#12855a; --warn:#c26a00;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-user-select:none;user-select:none}
+#app{display:flex;flex-direction:column;height:100%}
+
+#statusbar{display:flex;align-items:center;gap:8px;padding:10px 14px;
+  padding-top:calc(10px + env(safe-area-inset-top));
+  background:var(--panel);border-bottom:1px solid var(--line);font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.on{background:var(--ok)}
+.spacer{flex:1}
+.pill{padding:2px 8px;border-radius:999px;background:#eef2f7;color:var(--muted);font-size:12px}
+.pill.on{background:var(--brand-soft);color:var(--brand)}
+#battery{font-variant-numeric:tabular-nums}
+
+#stage{position:relative;flex:1;overflow:hidden;background:#e6edf3}
+#cv{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;cursor:grab}
+#cv.drawing{cursor:crosshair}
+
+/* 左上：坐标读数 */
+#readout{position:absolute;left:10px;top:10px;padding:6px 9px;border-radius:8px;
+  background:rgba(255,255,255,.88);backdrop-filter:blur(4px);
+  font-size:11px;line-height:1.65;color:#3d4f60;pointer-events:none;
+  font-variant-numeric:tabular-nums;max-width:62%}
+#readout b{font-weight:500;color:#12212e}
+
+/* 右上：地图控件列 */
+#mapctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:7px}
+#mapctl button{width:40px;height:38px;border-radius:9px;border:1px solid var(--line);
+  background:rgba(255,255,255,.94);color:var(--text);font:inherit;font-size:12px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+  box-shadow:0 1px 3px rgba(18,33,46,.10)}
+#mapctl button:active{background:#eef2f7}
+#mapctl button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+#mapctl button.big{font-size:19px;line-height:1}
+
+#hint{position:absolute;left:12px;right:12px;bottom:44px;display:flex;
+  justify-content:center;pointer-events:none}
+#hint>span{background:rgba(255,255,255,.92);color:#3d4f60;font-size:12px;
+  line-height:1.45;padding:5px 11px;border-radius:8px;max-width:100%;text-align:center}
+
+#panel{background:var(--panel);border-top:1px solid var(--line);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+.seg{display:flex;background:#eef2f7;border-radius:9px;padding:3px;margin-bottom:9px}
+.seg button{flex:1;border:0;background:transparent;padding:8px 2px;border-radius:7px;
+  font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.seg button.active{background:var(--panel);color:var(--text);font-weight:500;
+  box-shadow:0 1px 3px rgba(18,33,46,.12)}
+
+/* 已圈好的区域列表（多块地）。横向滚动，点一下取出来继续编辑，点 × 删掉 */
+.areas{display:flex;gap:6px;overflow-x:auto;padding-bottom:9px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.areas::-webkit-scrollbar{display:none}
+.areas:empty{display:none}
+.area{flex:none;display:flex;align-items:center;gap:5px;border:1px solid var(--line);
+  background:var(--panel);border-radius:999px;padding:5px 8px 5px 10px;font-size:12px;
+  color:var(--muted);cursor:pointer;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.area.on{background:var(--brand-soft);color:var(--brand);border-color:#bcd6f6;font-weight:500}
+.area .swatch{width:9px;height:9px;border-radius:2.5px;flex:none}
+.area .x{font-size:15px;line-height:1;color:#9aabbb;padding:0 2px;font-weight:400}
+.area .x:active{color:#c2185b}
+.metrics{display:flex;align-items:center;gap:6px;font-size:13px;
+  font-variant-numeric:tabular-nums;margin-bottom:9px;flex-wrap:wrap}
+.metrics b{font-weight:500}
+.metrics .k{color:var(--muted)}
+.metrics.tools{gap:7px}
+.mini{border:1px solid var(--line);background:var(--panel);border-radius:7px;
+  padding:6px 10px;font:inherit;font-size:12px;color:var(--muted);cursor:pointer}
+.mini.on{background:var(--brand-soft);color:var(--brand);border-color:#bcd6f6}
+.mini.hot{background:var(--brand);color:#fff;border-color:var(--brand)}
+.mini:active{background:#eef2f7}
+.mini:disabled{background:#f4f7fa;color:#b8c4d0;border-color:#e3eaf2;cursor:not-allowed}
+.actions{display:flex;gap:8px}
+.actions button{flex:1;border:0;border-radius:9px;padding:12px 0;font:inherit;
+  font-size:14px;font-weight:500;cursor:pointer}
+.primary{background:var(--brand);color:#fff}
+.primary:disabled{background:#b8cbdf;color:#eef4fa;cursor:not-allowed}
+.ghost{background:var(--brand-soft);color:var(--brand)}
+.ghost:disabled{background:#eef2f7;color:#adbccb;cursor:not-allowed}
+#toast{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.96);
+  background:rgba(18,33,46,.9);color:#fff;padding:10px 16px;border-radius:9px;
+  font-size:13px;max-width:80%;opacity:0;transition:opacity .18s,transform .18s;
+  pointer-events:none;text-align:center;white-space:pre-line;line-height:1.6}
+#toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+/* ============================================================
+   页面路由：连接页 / 规划页 / 设置页，同一时刻只显示一个
+   ============================================================ */
+.screen{display:none;flex-direction:column;height:100%;min-height:0}
+.screen.show{display:flex}
+
+/* ---------- 规划页状态栏里的可点区域 ---------- */
+#statusbar .link{display:flex;align-items:center;gap:8px;cursor:pointer;
+  padding:3px 8px 3px 0;border-radius:8px;min-width:0}
+#statusbar .link:active{background:#eef2f7}
+#statusbar .link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icobtn{width:32px;height:32px;border:0;background:transparent;color:var(--muted);
+  font-size:17px;line-height:1;cursor:pointer;padding:0;border-radius:8px;flex:none;
+  display:flex;align-items:center;justify-content:center}
+.icobtn:active{background:#eef2f7}
+
+/* ============================================================
+   ① 设备连接页（入场）
+   ============================================================ */
+#screen-connect{overflow-y:auto;-webkit-overflow-scrolling:touch;
+  background:linear-gradient(180deg,#f7fafd,#edf3fa);
+  padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))}
+.cn-wrap{width:100%;max-width:430px;margin:0 auto;display:flex;flex-direction:column;
+  flex:1;min-height:0}
+
+.cn-brand{text-align:center;padding:22px 0 18px;flex:none}
+.cn-logo{width:72px;height:72px;margin:0 auto 13px;border-radius:21px;
+  background:linear-gradient(150deg,#2e86f0,#0f4fa8);display:flex;align-items:center;
+  justify-content:center;box-shadow:0 10px 24px rgba(22,104,214,.30)}
+.cn-brand h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.4px}
+.cn-brand p{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+
+.cn-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:20px 16px 16px;text-align:center;box-shadow:0 2px 10px rgba(18,33,46,.05);flex:none}
+.cn-ring{position:relative;width:84px;height:84px;margin:0 auto 13px;border-radius:50%;
+  background:#eef2f7;color:var(--muted);display:flex;align-items:center;justify-content:center;
+  transition:background .25s,color .25s}
+.cn-ring.scan::before,.cn-ring.scan::after{content:'';position:absolute;inset:-2px;
+  border-radius:50%;border:2px solid var(--brand);animation:ripple 1.9s ease-out infinite}
+.cn-ring.scan::after{animation-delay:.95s}
+@keyframes ripple{0%{transform:scale(1);opacity:.5}100%{transform:scale(1.7);opacity:0}}
+.cn-ring.on{background:#e4f5ed;color:var(--ok)}
+.cn-ring.err{background:#fdeded;color:#c0392b}
+.cn-state{font-size:15.5px;font-weight:500;margin-bottom:5px}
+.cn-detail{font-size:12.5px;color:var(--muted);line-height:1.6;min-height:20px;
+  max-width:300px;margin:0 auto}
+
+.cn-steps{display:none;margin:14px 0 0;padding:0;list-style:none;text-align:left;
+  max-width:250px;margin-left:auto;margin-right:auto}
+.cn-steps.show{display:block}
+.cn-steps li{position:relative;padding:5px 0 5px 25px;font-size:12.5px;color:var(--muted)}
+.cn-steps li::before{content:'';position:absolute;left:6px;top:11px;width:9px;height:9px;
+  border-radius:50%;background:#dbe3ec;transition:background .2s}
+.cn-steps li.run{color:var(--brand)}
+.cn-steps li.run::before{background:var(--brand);animation:blink 1.1s ease-in-out infinite}
+.cn-steps li.done{color:var(--text)}
+.cn-steps li.done::before{background:var(--ok)}
+@keyframes blink{50%{opacity:.25}}
+
+.cn-list{margin-top:14px;flex:none}
+.cn-list h4{margin:0 0 9px 3px;font-size:12px;font-weight:500;color:var(--muted);
+  letter-spacing:.4px;display:flex;align-items:center;gap:6px}
+.cn-dev{display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer;
+  transition:border-color .15s,box-shadow .15s}
+.cn-dev:active{border-color:#bcd6f6;box-shadow:0 2px 8px rgba(22,104,214,.10)}
+.cn-dev .nm{font-size:14px;font-weight:500;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.cn-dev .mac{font-size:11.5px;color:var(--muted);margin-top:2px;
+  font-variant-numeric:tabular-nums}
+.cn-dev .sig{display:flex;align-items:flex-end;gap:2.5px;height:15px;margin-left:auto;flex:none}
+.cn-dev .sig i{width:3.5px;border-radius:1.5px;background:#dbe3ec}
+.cn-dev .sig i.on{background:var(--ok)}
+.cn-dev .go{font-size:12.5px;color:var(--brand);font-weight:500;flex:none;padding-left:4px}
+.cn-empty{padding:16px 0;text-align:center;font-size:12.5px;color:var(--muted)}
+
+.cn-actions{display:flex;flex-direction:column;gap:9px;margin-top:auto;padding-top:20px;flex:none}
+.cn-actions button{border:0;border-radius:12px;padding:14px 0;font:inherit;font-size:15px;
+  font-weight:500;cursor:pointer}
+.cn-note{font-size:11.5px;color:var(--muted);line-height:1.6;text-align:center;
+  padding:14px 4px 0;flex:none}
+
+/* ============================================================
+   ③ 设置页
+   ============================================================ */
+#screen-settings{background:var(--bg)}
+.st-head{display:flex;align-items:center;gap:8px;flex:none;background:var(--panel);
+  border-bottom:1px solid var(--line);padding:10px 14px;
+  padding-top:calc(10px + env(safe-area-inset-top))}
+.st-head h2{margin:0;font-size:16px;font-weight:600}
+.st-back{width:34px;height:34px;border:0;background:transparent;color:var(--brand);
+  font-size:25px;line-height:1;cursor:pointer;padding:0;margin-left:-4px;border-radius:8px}
+.st-back:active{background:#eef2f7}
+.st-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:14px 14px calc(26px + env(safe-area-inset-bottom))}
+.st-group{margin-bottom:15px}
+.st-group>h3{margin:0 0 8px 4px;font-size:11.5px;font-weight:500;color:var(--muted);
+  letter-spacing:.5px}
+.st-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.st-row{display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:13.5px;
+  border-bottom:1px solid #eff3f8;min-height:47px}
+.st-row:last-child{border-bottom:0}
+.st-row.tap{cursor:pointer}
+.st-row.tap:active{background:#f7fafd}
+.st-row .lb{flex:none}
+.st-row .vl{margin-left:auto;color:var(--muted);font-size:12.5px;text-align:right;
+  font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-row .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:3px;
+  line-height:1.5;white-space:normal}
+.st-in{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:7px 10px;
+  font:inherit;font-size:13px;color:var(--text);background:#fbfcfe;
+  font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+.st-in:focus{outline:none;border-color:var(--brand);background:#fff}
+.st-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 12px;
+  font:inherit;font-size:12.5px;color:var(--brand);cursor:pointer;white-space:nowrap;flex:none}
+.st-btn:active{background:#eef2f7}
+.st-btn.danger{color:#c0392b;border-color:#efd2ce}
+/* 行内只有一个按钮时推到右侧，跟「标签 ── 值」的视觉节奏一致 */
+.st-row>.st-btn:first-of-type{margin-left:auto}
+.st-seg{display:flex;background:#eef2f7;border-radius:8px;padding:2px;flex:none;margin-left:auto}
+.st-seg button{border:0;background:transparent;padding:6px 10px;border-radius:6px;font:inherit;
+  font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.st-seg button.active{background:var(--panel);color:var(--text);font-weight:500;
+  box-shadow:0 1px 2px rgba(18,33,46,.12)}
+.sw{flex:none;margin-left:auto;width:46px;height:27px;border-radius:999px;background:#dbe3ec;
+  position:relative;cursor:pointer;transition:background .2s}
+.sw.on{background:var(--brand)}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.22);transition:transform .2s}
+.sw.on::after{transform:translateX(19px)}
+.st-note{font-size:11.5px;color:var(--muted);line-height:1.6;padding:0 4px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ==========================================================
+       ① 入场：设备连接页。
+       必须先连上机器人才能进规划页——不然操作员会对着一片
+       「不知道发给了谁」的界面圈地，这是最早的失败点。
+       ========================================================== -->
+  <section id="screen-connect" class="screen show">
+    <div class="cn-wrap">
+
+      <div class="cn-brand">
+        <div class="cn-logo">
+          <svg width="39" height="39" viewBox="0 0 38 38" fill="none">
+            <circle cx="19" cy="20" r="12" stroke="#fff" stroke-width="2.1"/>
+            <circle cx="14.6" cy="15.4" r="1.5" fill="#fff"/>
+            <circle cx="23.4" cy="15.4" r="1.5" fill="#fff"/>
+            <circle cx="14.6" cy="24.6" r="1.5" fill="#fff"/>
+            <circle cx="23.4" cy="24.6" r="1.5" fill="#fff"/>
+            <path d="M19 8V1.6" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
+            <path d="M19 2.6l6.4 2.6L19 7.8z" fill="#fff"/>
+          </svg>
+        </div>
+        <h1>捡球机器人</h1>
+        <p>场地规划控制台</p>
+      </div>
+
+      <div class="cn-card">
+        <div class="cn-ring" id="cnRing">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 7.5l9.5 9.5-4.8 3.7V3.3l4.8 3.7L7 16.5"/>
+          </svg>
+        </div>
+        <div class="cn-state" id="cnState">请先连接机器人</div>
+        <div class="cn-detail" id="cnDetail">打开机器人电源，确认指示灯闪烁后再搜索</div>
+
+        <ol class="cn-steps" id="cnSteps">
+          <li data-step="link">建立蓝牙连接</li>
+          <li data-step="svc">匹配串口服务</li>
+          <li data-step="ready">握手完成</li>
+        </ol>
+      </div>
+
+      <div class="cn-list" id="cnListBox" style="display:none">
+        <h4>搜索到的设备 <span id="cnCount"></span></h4>
+        <div id="cnList"></div>
+      </div>
+
+      <div class="cn-actions">
+        <button class="primary" id="btnScan">搜索机器人</button>
+        <button class="ghost" id="btnDemo">演示模式（无机器人时体验）</button>
+      </div>
+
+      <div class="cn-note" id="cnNote"></div>
+
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       ② 规划页
+       ========================================================== -->
+  <section id="screen-plan" class="screen">
+
+  <div id="statusbar">
+    <button class="link" id="btnLink" title="查看连接状态">
+      <span class="dot" id="linkDot"></span>
+      <span id="linkText">未连接</span>
+    </button>
+    <span class="spacer"></span>
+    <span class="pill" id="modeTag">手动圈地</span>
+    <span id="battery">--%</span>
+    <button class="icobtn" id="btnSettings" title="设置">&#9881;</button>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div id="readout">
+      <div id="rdCenter">中心 --</div>
+      <div id="rdPlane">平面 --</div>
+      <div id="rdMine">定位 --</div>
+    </div>
+
+    <div id="mapctl">
+      <button id="btnLocate" title="定位到当前位置">定位</button>
+      <button id="btnZoomIn" class="big" title="放大">+</button>
+      <button id="btnZoomOut" class="big" title="缩小">−</button>
+      <button id="btnBase" title="切换底图">底图</button>
+    </div>
+
+    <div id="hint"></div>
+    <div id="toast"></div>
+  </div>
+
+  <div id="panel">
+    <div class="seg">
+      <button data-tool="browse" class="active" title="只看地图，不编辑">浏览</button>
+      <button data-tool="rect" title="拖出一个矩形">矩形</button>
+      <button data-tool="circle" title="按住定圆心，拖出半径">圆形</button>
+      <button data-tool="poly" title="点几个点，自动连成区域">多边形</button>
+    </div>
+
+    <div class="areas" id="areas"></div>
+
+    <div class="metrics">
+      <span class="k">顶点</span><b id="mPts">0</b>
+      <span class="k">面积</span><b id="mArea">0.0</b><span class="k">m²</span>
+      <span class="k">规划</span><b id="mPlan">0.0</b><span class="k">m</span>
+      <span class="k">已清扫</span><b id="mCovered">0.0</b><span class="k">m²</span>
+    </div>
+
+    <div class="metrics tools">
+      <button class="mini" id="btnNewArea">＋ 新建区域</button>
+      <button class="mini" id="btnUndo">撤销</button>
+      <button class="mini" id="btnClear">清空</button>
+      <button class="mini" id="btnCalib">场地标定</button>
+      <button class="mini" id="btnOrigin">设基准点</button>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="btnSend" disabled>下发区域</button>
+      <button class="ghost" id="btnRun" disabled>开始作业</button>
+    </div>
+  </div>
+
+  </section>
+
+  <!-- ==========================================================
+       ③ 设置页
+       ========================================================== -->
+  <section id="screen-settings" class="screen">
+    <div class="st-head">
+      <button class="st-back" id="btnSetBack">&#8249;</button>
+      <h2>设置</h2>
+    </div>
+
+    <div class="st-body">
+
+      <div class="st-group">
+        <h3>机器人</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">连接状态</span>
+            <span class="vl" id="setConnState">未连接</span>
+          </div>
+          <div class="st-row">
+            <span class="lb">设备</span>
+            <span class="vl" id="setDevice">--</span>
+          </div>
+          <div class="st-row">
+            <button class="st-btn" id="btnReconnect">重新搜索连接</button>
+            <button class="st-btn danger" id="btnDisconnect">断开</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-group">
+        <h3>机器人 BLE 标识</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">设备名前缀</span>
+            <input class="st-in" id="inpNamePrefix" placeholder="GolfBot" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <span class="lb">服务 UUID</span>
+            <input class="st-in" id="inpSvcUuid" placeholder="0000ffe0-0000-1000-8000-00805f9b34fb" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <span class="lb">写入特征</span>
+            <input class="st-in" id="inpWriteUuid" placeholder="0000ffe1-…" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <span class="lb">通知特征</span>
+            <input class="st-in" id="inpNotifyUuid" placeholder="0000ffe2-…" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <button class="st-btn" id="btnSaveBle">保存到 App</button>
+          </div>
+        </div>
+        <p class="st-note">这几个值原生侧有编译期默认值，留空即用默认。现场联调时直接在这里改、点「保存到 App」，原生会存下来并立即生效，<b>不需要重新打包</b>。填了「设备名前缀」或「服务 UUID」的任一个就能开始扫描。</p>
+      </div>
+
+      <div class="st-group">
+        <h3>地图</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">底图源</span>
+            <div class="st-seg" id="segBasemap">
+              <button data-bm="esri">Esri</button>
+              <button data-bm="tianditu">天地图</button>
+              <button data-bm="custom">自定义</button>
+            </div>
+          </div>
+          <div class="st-row">
+            <span class="lb">天地图 Key</span>
+            <input class="st-in" id="inpTdtKey" placeholder="留空则只用 Esri" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <span class="lb">自定义源</span>
+            <input class="st-in" id="inpCustomUrl" placeholder="https://…/{z}/{x}/{y}.jpg" autocomplete="off">
+          </div>
+          <p class="st-note" style="padding:8px 14px 10px;margin:0">
+            自定义源里可以用 <b>{z}</b> <b>{x}</b> <b>{y}</b>，TMS 反向编号用 <b>{-y}</b>。
+            换成内网瓦片服务或别的镜像都行——这是底图被墙 / 被限流时最快的绕法。
+          </p>
+          <div class="st-row">
+            <span class="lb">显示底图</span>
+            <div class="sw on" id="swBasemap"></div>
+          </div>
+          <div class="st-row">
+            <span class="lb">显示网格</span>
+            <div class="sw on" id="swGrid"></div>
+          </div>
+          <div class="st-row">
+            <span class="lb">清晰度</span>
+            <div class="st-seg" id="segQuality">
+              <button data-q="sharp">高清</button>
+              <button data-q="normal">标准</button>
+              <button data-q="lite">省流</button>
+            </div>
+          </div>
+        </div>
+        <p class="st-note" id="noteQuality"></p>
+      </div>
+
+      <div class="st-group">
+        <h3>坐标标定</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">原点经度</span>
+            <input class="st-in" id="inpOriginLon" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <span class="lb">原点纬度</span>
+            <input class="st-in" id="inpOriginLat" inputmode="decimal" autocomplete="off">
+          </div>
+          <div class="st-row">
+            <button class="st-btn" id="btnOriginHere">以当前位置为原点</button>
+            <button class="st-btn" id="btnOriginReset">恢复默认</button>
+          </div>
+        </div>
+        <p class="st-note">圈地用的是以这个原点为 (0,0) 的米制平面坐标。换球场时把原点设到球场基准点，已画的区域会整体换算、视觉上不动。</p>
+      </div>
+
+      <div class="st-group">
+        <h3>作业参数</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">作业行距</span>
+            <input class="st-in" id="inpLane" inputmode="decimal" autocomplete="off">
+            <span class="vl" style="margin:0">m</span>
+          </div>
+          <div class="st-row">
+            <span class="lb">作业宽度</span>
+            <input class="st-in" id="inpMowerW" inputmode="decimal" autocomplete="off">
+            <span class="vl" style="margin:0">m</span>
+          </div>
+        </div>
+        <p class="st-note">行距决定覆盖路径的疏密，作业宽度决定边界内缩量（= 宽度 / 2）。原型默认 8m 只为在屏幕上看得清，实机请按机器人割幅填（约 1.2m）。</p>
+      </div>
+
+      <div class="st-group">
+        <h3>数据</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">瓦片缓存</span>
+            <span class="vl" id="setTileCount">0 张</span>
+            <button class="st-btn" id="btnClearTiles">清除</button>
+          </div>
+          <div class="st-row">
+            <span class="lb">示例地块</span>
+            <button class="st-btn" id="btnDemoAreas">恢复示例</button>
+          </div>
+          <div class="st-row">
+            <span class="lb">已圈区域</span>
+            <span class="vl" id="setAreaCount">0 块</span>
+            <button class="st-btn danger" id="btnWipeAreas">清空</button>
+          </div>
+          <div class="st-row">
+            <span class="lb">恢复出厂设置</span>
+            <button class="st-btn danger" id="btnResetAll">重置</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-group">
+        <h3>关于</h3>
+        <div class="st-card">
+          <div class="st-row">
+            <span class="lb">版本</span>
+            <span class="vl" id="setVersion">1.1.0</span>
+          </div>
+          <div class="st-row">
+            <span class="lb">运行环境</span>
+            <span class="vl" id="setEnv">浏览器</span>
+          </div>
+          <div class="st-row tap" id="rowLastSend">
+            <span class="lb">上次下发</span>
+            <span class="vl" id="setLastSend">还没有下发过</span>
+          </div>
+        </div>
+        <p class="st-note" id="noteEnv"></p>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // 0. 桥：H5 -> Native
+  // ============================================================
+  var Bridge = {
+    // 最近一次原生拒绝的原因（null = 没有失败）。
+    // 调用方在看返回值之外，还应该看这个，比如下发失败时要显示具体原因。
+    lastError: null,
+    hasNative: function () {
+      return !!(window.GolfNative && window.GolfNative.postMessage) ||
+        !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.golf);
+    },
+    post: function (type, payload) {
+      var msg = { type: type, payload: payload || {} };
+      Bridge.lastError = null;
+      try {
+        if (window.GolfNative && window.GolfNative.postMessage) {
+          // Android：postMessage 同步返回 {ok, reason}。
+          // 必须在 JS 里读这个结果——只要「原生对象存在」就当成功是错的：
+          // 没连机器人时原生会拒绝，界面却会显示已下发。
+          return Bridge._ack(window.GolfNative.postMessage(JSON.stringify(msg)));
+        }
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.golf) {
+          // iOS：WKScriptMessageHandler 没有返回值，拿不到同步结果。
+          // 失败原因只能由原生异步回推（onConnection 的 detail），
+          // 所以这里按「已交给原生」返回 true 是对的。
+          window.webkit.messageHandlers.golf.postMessage(msg);
+          return true;
+        }
+      } catch (e) {
+        console.warn('[bridge:error]', e);
+        Bridge.lastError = '原生通道异常：' + (e && e.message ? e.message : e);
+        return false;
+      }
+      console.log('[bridge:stub]', msg);                                // 浏览器兜底
+      return false;
+    },
+    // 解析原生同步返回的受理结果。解析不了就按受理处理（兼容没有返回值的旧实现）。
+    _ack: function (res) {
+      if (typeof res !== 'string' || !res) return true;
+      try {
+        var o = JSON.parse(res);
+        if (o && o.ok === false) {
+          Bridge.lastError = o.reason || '原生拒绝了这条指令';
+          return false;
+        }
+      } catch (e) { /* 非 JSON 当作受理 */ }
+      return true;
+    }
+  };
+
+  // ============================================================
+  // 1. 配置
+  // ============================================================
+  var CONFIG = {
+    // 局部米制坐标原点 (0,0) 对应的经纬度 = 标定场地时的第一个点。
+    // 当前是随手取的示例坐标（深圳某地），换成你们球场即可。
+    origin: { lon: 114.045000, lat: 22.705000 },
+    showBasemap: true,
+    showGrid: true,         // 米制网格，圈地时对距离有个直观参照
+    basemap: 'esri',        // 'esri' 免 key 可直接看；生产建议 'tianditu'；'custom' 自填 URL
+    tiandituKey: '',
+    customTileUrl: '',      // 自定义瓦片模板，支持 {z} {x} {y} 和 TMS 的 {-y}
+    quality: 'sharp',       // 底图清晰度：sharp 高清 / normal 标准 / lite 省流
+    follow: false           // 相机是否跟随当前位置
+  };
+
+  // 「恢复默认原点」的目标值。单独存一份，避免被 CONFIG.origin 的修改污染。
+  var DEFAULT_ORIGIN = { lon: 114.045000, lat: 22.705000 };
+
+  // ============================================================
+  // 1.1 设置：持久化 + 应用到 CONFIG
+  //     没有 localStorage 时（隐私模式 / 测试桩）降级为「本次会话有效」，
+  //     不抛错也不假装存住了——saveSettings 把结果返回给设置页去提示。
+  // ============================================================
+  var SETTINGS_KEY = 'golfapp.settings.v1';
+  // 出厂默认值。「恢复出厂设置」直接拷它，所以别在别处改这个对象。
+  var SETTINGS_DEFAULT = {
+    basemap: 'esri', tiandituKey: '', showBasemap: true, showGrid: true,
+    quality: 'sharp', lane: 8, mowerWidth: 8, origin: null,
+    customTileUrl: '',
+    // BLE 标识：原生侧有编译期默认值，这里填了会覆盖它（现场联调不用重打包）
+    bleNamePrefix: '', bleServiceUuid: '', bleWriteUuid: '', bleNotifyUuid: ''
+  };
+  var settings = JSON.parse(JSON.stringify(SETTINGS_DEFAULT));
+
+  function saveSettings() {
+    try {
+      window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function loadSettings() {
+    var raw = null;
+    try { raw = window.localStorage.getItem(SETTINGS_KEY); } catch (e) { raw = null; }
+    if (!raw) return false;
+    var o = null;
+    try { o = JSON.parse(raw); } catch (e) { o = null; }
+    if (!o || typeof o !== 'object') return false;
+    for (var k in settings) {
+      if (Object.prototype.hasOwnProperty.call(settings, k) &&
+          o[k] !== undefined && o[k] !== null) settings[k] = o[k];
+    }
+    return true;
+  }
+
+  // 把 settings 灌进 CONFIG 与作业参数。设置页每次改动后都调它。
+  function applySettings() {
+    CONFIG.basemap = (settings.basemap === 'tianditu' || settings.basemap === 'custom')
+      ? settings.basemap : 'esri';
+    CONFIG.tiandituKey = String(settings.tiandituKey || '');
+    CONFIG.customTileUrl = String(settings.customTileUrl || '');
+    CONFIG.showBasemap = !!settings.showBasemap;
+    CONFIG.showGrid = !!settings.showGrid;
+    CONFIG.quality = settings.quality || 'sharp';
+    if (settings.origin && typeof settings.origin.lon === 'number' &&
+        typeof settings.origin.lat === 'number') {
+      CONFIG.origin.lon = settings.origin.lon;
+      CONFIG.origin.lat = settings.origin.lat;
+    }
+    syncCoverageParams();
+  }
+
+  var TILE = 256;
+  var MAXZ = 22;            // 内部世界像素的固定放大层级（保证浮点精度够用）
+  var ZMIN = 14, ZMAX = 21;
+  var M_PER_DEG_LAT = 110540;
+
+  // ============================================================
+  // 2. 投影
+  //    Web Mercator（经纬度 <-> 世界像素 @MAXZ）
+  //    局部切平面（米 <-> 经纬度，200m 尺度误差可忽略）
+  // ============================================================
+  function mPerDegLon(lat) { return 111320 * Math.cos(lat * Math.PI / 180); }
+
+  function proj(lon, lat) {
+    var size = TILE * Math.pow(2, MAXZ);
+    var s = Math.min(Math.max(Math.sin(lat * Math.PI / 180), -0.9999), 0.9999);
+    return {
+      x: (lon + 180) / 360 * size,
+      y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * size
+    };
+  }
+  function unproj(x, y) {
+    var size = TILE * Math.pow(2, MAXZ);
+    var n = Math.PI - 2 * Math.PI * y / size;
+    return {
+      lon: x / size * 360 - 180,
+      lat: 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))
+    };
+  }
+  // 米制平面 -> 经纬度
+  function localToLonLat(x, y) {
+    return {
+      lon: CONFIG.origin.lon + x / mPerDegLon(CONFIG.origin.lat),
+      lat: CONFIG.origin.lat + y / M_PER_DEG_LAT
+    };
+  }
+  // 经纬度 -> 米制平面
+  function lonLatToLocal(lon, lat) {
+    return {
+      x: (lon - CONFIG.origin.lon) * mPerDegLon(CONFIG.origin.lat),
+      y: (lat - CONFIG.origin.lat) * M_PER_DEG_LAT
+    };
+  }
+
+  // 地面分辨率（米/屏幕像素），Web Mercator 公式
+  function metersPerPixel(lat) {
+    return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, cam.zoom);
+  }
+
+  // ============================================================
+  // 3. 相机：地图中心 + 缩放（小数层级），像高德一样自由平移缩放
+  // ============================================================
+  var cam = { lon: CONFIG.origin.lon, lat: CONFIG.origin.lat, zoom: 18 };
+
+  function camWorld() { return proj(cam.lon, cam.lat); }
+  function setCamWorld(x, y) {
+    var ll = unproj(x, y);
+    cam.lon = ll.lon;
+    cam.lat = Math.min(Math.max(ll.lat, -85), 85);
+    syncScale();
+  }
+  function scaleFor(z) { return Math.pow(2, z - MAXZ); }   // 屏幕像素 / 世界像素
+
+  function llToScreen(ll) {
+    var w = proj(ll.lon, ll.lat), c = camWorld(), s = scaleFor(cam.zoom);
+    return { x: W / 2 + (w.x - c.x) * s, y: H / 2 + (w.y - c.y) * s };
+  }
+  function screenToLL(p) {
+    var c = camWorld(), s = scaleFor(cam.zoom);
+    return unproj(c.x + (p.x - W / 2) / s, c.y + (p.y - H / 2) / s);
+  }
+  // 米制 -> 屏幕 / 屏幕 -> 米制
+  function mToScreen(m) { return llToScreen(localToLonLat(m.x, m.y)); }
+  function screenToM(p) { var ll = screenToLL(p); return lonLatToLocal(ll.lon, ll.lat); }
+
+  function syncScale() { mpp = metersPerPixel(cam.lat); }
+
+  function panByPixels(dx, dy) {
+    var s = scaleFor(cam.zoom), c = camWorld();
+    setCamWorld(c.x - dx / s, c.y - dy / s);
+  }
+
+  // 以屏幕上某点为不动点缩放
+  function zoomAt(sp, nz) {
+    nz = Math.min(ZMAX, Math.max(ZMIN, nz));
+    if (Math.abs(nz - cam.zoom) < 1e-4) return;
+    var before = screenToLL(sp);
+    cam.zoom = nz;
+    syncScale();
+    var after = screenToLL(sp);
+    cam.lon += (before.lon - after.lon);
+    cam.lat += (before.lat - after.lat);
+    syncScale();
+    reviveTiles();      // 缩放是用户主动操作，顺手给失败过的瓦片重试机会
+  }
+
+  // ============================================================
+  // 4. 瓦片底图
+  //
+  // 三个必须处理的现实问题（「放大了就没地图」就是它们造成的）：
+  //
+  //   1) 缩放要换整套新层级的瓦片，加载期间如果什么都不画，屏幕就是空白。
+  //      → 当前层没到位时，用低一层（祖先瓦片）裁剪放大兜底。
+  //        放大瞬间画面立刻有内容（糊一点），新瓦片到了自动替换。
+  //   2) 请求会失败（网络抖动 / 被限流）。失败必须能重试，
+  //      且失败时也要触发重绘，否则画面卡在空白等用户刷新。
+  //   3) 一次抛出几十个并发请求会被限流，反而大面积失败。
+  //      → 排队限流，一次最多 8 个。
+  // ============================================================
+  var TILE_MAX_Z = { esri: 19, tianditu: 18, custom: 20 };
+  // 实测：Esri 在锚点位置 z=19 是 17KB 正常影像，z=20 只剩 2.5KB 空白占位。
+  // 所以再往上放大只是把 z=19 拉伸，没有新数据可拿。
+  var FALLBACK_UP = 5;        // 最多向上找 5 层祖先（1/32 分辨率）兜底
+  var FALLBACK_DOWN = 2;      // 最多向下找 2 层后代（4×4=16 张拼一张），再多就碎得没意义
+  var MAX_CONCURRENT = 6;     // 并发上限。原来是 8，但弱网下 8 个请求互相抢带宽，
+                              // 结果是「每个都慢、好几个超时」，反而比 6 个更差。
+  var MAX_RETRY = 3;
+  var RETRY_BASE = 800;       // ms，每次失败后翻倍
+  var TILE_CACHE_MAX = 600;
+
+  function maxTileZ() { return TILE_MAX_Z[CONFIG.basemap] || 19; }
+
+  // 底图清晰度 → 瓦片层级要比相机层级高几级。
+  //
+  // 这里曾经是「卫星图破碎破旧」的真正原因：canvas 是按 DPR 放大的位图
+  // （cv.width = W * DPR），但瓦片层级只按 CSS 像素的 cam.zoom 去取，
+  // 于是一张 256px 的源瓦片被拉伸 DPR 倍画出来——DPR=3 的屏幕上等于用
+  // 三分之一的分辨率显示卫星图，看着就是糊、锯齿、斑驳；而 DOM 界面是
+  // 矢量绘制的所以照样锐利，两者一对比就更显得像「破旧照片」。
+  // 正确做法是让「源瓦片像素 ≈ 屏幕物理像素」：层级 + log2(DPR)。
+  function qualityShift() {
+    var d = DPR > 0 ? DPR : 1;
+    if (CONFIG.quality === 'lite') return 0;
+    if (CONFIG.quality === 'normal') return Math.max(0, Math.log2(d) - 1);
+    return Math.log2(d);
+  }
+  function tileZoom() {
+    return Math.max(2, Math.min(maxTileZ(), Math.round(cam.zoom + qualityShift())));
+  }
+
+  // 把屏幕坐标对齐到物理像素网格。相邻瓦片的公共边界算出来是同一个值，
+  // 对齐之后既不露缝，也不会因为落在半个物理像素上被重采样糊掉。
+  function snapPx(v) { return Math.round(v * (DPR > 0 ? DPR : 1)) / (DPR > 0 ? DPR : 1); }
+
+  function tileUrl(z, x, y) {
+    if (CONFIG.basemap === 'custom' && CONFIG.customTileUrl) {
+      // 自定义模板：{z}/{x}/{y}，TMS 的反向行号用 {-y}
+      return CONFIG.customTileUrl
+        .replace(/\{-y\}/g, String((1 << z) - 1 - y))
+        .replace(/\{z\}/g, String(z))
+        .replace(/\{x\}/g, String(x))
+        .replace(/\{y\}/g, String(y));
+    }
+    if (CONFIG.basemap === 'tianditu' && CONFIG.tiandituKey) {
+      return 'https://t' + (x % 8) + '.tianditu.gov.cn/img_w/wmts' +
+        '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default' +
+        '&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX=' + z +
+        '&TILEROW=' + y + '&TILECOL=' + x + '&tk=' + CONFIG.tiandituKey;
+    }
+    return 'https://server.arcgisonline.com/ArcGIS/rest/services/' +
+      'World_Imagery/MapServer/tile/' + z + '/' + y + '/' + x;
+  }
+
+  var tileCache = {};
+  var tileQueue = [];
+  var tileActive = 0;         // 已发出、还没回来的请求数（主循环靠它决定要不要继续重绘）
+  var tileFail = 0;           // 失败过的瓦片数，超阈值时给提示
+
+  function tileKey(z, x, y) { return z + '/' + x + '/' + y; }
+
+  // 取一张瓦片记录；没有就排队请求，失败过的到点会重新排队
+  function getTile(z, x, y) {
+    var k = tileKey(z, x, y);
+    var rec = tileCache[k];
+    if (!rec) {
+      if (Object.keys(tileCache).length > TILE_CACHE_MAX) pruneTiles();
+      rec = { img: null, z: z, x: x, y: y, ok: false, tries: 0, nextTry: 0, queued: false };
+      tileCache[k] = rec;
+    }
+    if (!rec.ok && !rec.queued && rec.tries < MAX_RETRY && Date.now() >= rec.nextTry) {
+      rec.queued = true;
+      tileQueue.push(rec);
+      pumpTiles();
+    }
+    return rec;
+  }
+
+  function pumpTiles() {
+    while (tileActive < MAX_CONCURRENT && tileQueue.length) startTile(tileQueue.shift());
+  }
+
+  function startTile(rec) {
+    tileActive++;
+    rec.queued = false;
+    rec.tries++;
+    var img = new Image();          // 每次尝试换新对象，避免复用旧事件处理器
+    var settled = false;
+    function settle(ok) {
+      if (settled) return;
+      settled = true;
+      tileActive--;
+      if (ok) {
+        rec.img = img;
+        rec.ok = true;
+      } else {
+        tileFail++;
+        rec.nextTry = Date.now() + RETRY_BASE * Math.pow(2, rec.tries - 1);
+        // 到点自动重试。重试实际发生在下一次 drawTiles -> getTile，
+        // 所以这里先安排一次重绘把流程带起来。
+        setTimeout(function () { draw(); }, Math.max(50, rec.nextTry - Date.now()));
+      }
+      pumpTiles();
+      draw();                       // 成功和失败都要重绘，失败时祖先兜底立即生效
+    }
+    img.addEventListener('load', function () { settle(true); });
+    img.addEventListener('error', function () { settle(false); });
+    img.src = tileUrl(rec.z, rec.x, rec.y);
+  }
+
+  // 缓存清理：优先扔掉没成功的，其次扔最早用的
+  function pruneTiles() {
+    var keys = Object.keys(tileCache);
+    var dropped = 0;
+    for (var i = 0; i < keys.length && dropped < 120; i++) {
+      if (!tileCache[keys[i]].ok) { delete tileCache[keys[i]]; dropped++; }
+    }
+    for (var j = 0; j < keys.length && dropped < 120; j++) {
+      if (tileCache[keys[j]]) { delete tileCache[keys[j]]; dropped++; }
+    }
+  }
+
+  // 用户主动缩放/平移后，给彻底失败的瓦片再来一次机会。
+  // 这条直接对应「刷新一下就好了」——现在不用刷新，动一下地图就恢复。
+  var lastRevive = 0;
+  function reviveTiles(force) {
+    var now = Date.now();
+    if (!force && now - lastRevive < 1000) return;      // 连续滚轮缩放时节流
+    lastRevive = now;
+    for (var k in tileCache) {
+      var r = tileCache[k];
+      if (!r.ok && r.tries >= MAX_RETRY) { r.tries = 0; r.nextTry = 0; }
+    }
+    tileFail = 0;
+  }
+
+  // 换底图源 / 改清晰度后旧瓦片全部作废（层级和 URL 都变了）。
+  // 用「原地删键」而不是重新赋值，因为 GolfDebug.tileCache 持有同一个引用。
+  function resetTiles() {
+    for (var k in tileCache) delete tileCache[k];
+    tileQueue.length = 0;
+    tileFail = 0;
+    resetHealth();          // 换源了就该立刻重新评估，否则还会显示上一个源的警告
+  }
+
+  // 底图健康度。tileFail / tilesAllDead 以前算了却没人用，
+  // 于是用户只能对着一张破碎的地图猜"是网络问题还是 App 问题"。
+  function tileHealth() {
+    var total = 0, ok = 0, dead = 0;
+    for (var k in tileCache) {
+      total++;
+      if (tileCache[k].ok) ok++;
+      else if (tileCache[k].tries >= MAX_RETRY) dead++;
+    }
+    return { total: total, ok: ok, dead: dead, active: tileActive, queued: tileQueue.length };
+  }
+
+  // 判据只看两件事：有没有一张成功的、确凿失败够不够多。
+  //   · ok > 0    → 网络是通的，只是慢，别吓唬用户去换源
+  //   · dead < 3  → 可能只是某几张抖动，再等等
+  // 这里**故意不用 active === 0 当条件**：被墙或被黑洞丢包时请求会一直挂着
+  // 不返回，active 永远不为 0，那就永远不报警了——用户还是只能对着破图猜。
+  // 反正 500ms 后会重算，真加载出来了 ok > 0 会自动消警。
+  //
+  // 结果缓存 500ms：refresh 在拖拽时一秒调几十次，而这个函数要遍历整个瓦片缓存。
+  var healthAt = 0, healthText = '';
+  function basemapWarning() {
+    if (!CONFIG.showBasemap) return '';
+    var now = Date.now();
+    if (now - healthAt > 500) {
+      healthAt = now;
+      var h = tileHealth();
+      healthText = (h.ok === 0 && h.dead >= 3)
+        ? ('底图加载失败（' + h.dead + ' 张瓦片请求被拒）· 到「设置 → 底图源」换一个源，或检查网络')
+        : '';
+    }
+    return healthText;
+  }
+
+  // 把上面那个缓存作废，让下一次 refresh 立刻重新评估。
+  // 换底图源 / 切清晰度时都该走一次——否则最长 500ms 内还挂着上一个源的判断，
+  // 用户会以为「改了没用」。
+  function resetHealth() { healthAt = 0; healthText = ''; }
+
+  // 用「向上 up 层」的祖先瓦片去画第 (tx,ty) 张当前层瓦片时，
+  // 该从祖先图的哪个小方块裁出来。sub 个当前瓦片拼成一张祖先瓦片。
+  function ancestorCrop(up, tx, ty) {
+    var sub = 1 << up;
+    var sw = TILE / sub;
+    return { sx: (tx & (sub - 1)) * sw, sy: (ty & (sub - 1)) * sw, sw: sw, sh: sw };
+  }
+
+  // 找一张「现在就能画」的瓦片。三层兜底，顺序不能反：
+  //   1) 自己已到位 → 直接用
+  //   2) 向上找祖先 → 裁剪一块放大画（放大时用：新的细层还在下载）
+  //   3) 向下找后代 → 拼 4 张或 16 张缩着画（缩小时用：粗层还没请求，
+  //      但刚才看细层时留下的瓦片还在缓存里）
+  // 少了第 3 条，快速缩小一样会有一瞬间空白。
+  // 返回 { rec, up } 或 { down, z, x, y }
+  function readyTile(z, x, y) {
+    for (var up = 0; up <= FALLBACK_UP; up++) {
+      var az = z - up;
+      if (az < 0) break;
+      var rec = tileCache[tileKey(az, x >> up, y >> up)];
+      if (rec && rec.ok) return { rec: rec, up: up };
+    }
+    for (var down = 1; down <= FALLBACK_DOWN; down++) {
+      if (z + down > maxTileZ()) break;
+      var sub = 1 << down;
+      var allOk = true;
+      for (var i = 0; i < sub && allOk; i++) {
+        for (var j = 0; j < sub; j++) {
+          var r2 = tileCache[tileKey(z + down, x * sub + i, y * sub + j)];
+          if (!r2 || !r2.ok) { allOk = false; break; }
+        }
+      }
+      if (allOk) return { down: down, z: z + down, x: x, y: y };
+    }
+    return null;
+  }
+
+  // 当前视口里一张能画的瓦片都没有（用来提示底图挂了）
+  function tilesAllDead() {
+    if (!CONFIG.showBasemap) return false;
+    var z = tileZoom();
+    var n = Math.pow(2, z);
+    var tl = screenToLL({ x: 0, y: 0 });
+    var br = screenToLL({ x: W, y: H });
+    var a = proj(tl.lon, tl.lat), b = proj(br.lon, br.lat);
+    var k = Math.pow(2, MAXZ - z);
+    var x0 = Math.floor(a.x / (TILE * k)), x1 = Math.floor(b.x / (TILE * k));
+    var y0 = Math.floor(a.y / (TILE * k)), y1 = Math.floor(b.y / (TILE * k));
+    var any = 0, alive = 0;
+    for (var tx = x0; tx <= x1; tx++) {
+      for (var ty = y0; ty <= y1; ty++) {
+        if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
+        any++;
+        if (readyTile(z, tx, ty)) alive++;
+      }
+    }
+    return any > 0 && alive === 0;
+  }
+
+  // 瓦片左上角在屏幕上的位置（支持小数层级，瓦片会被缩放绘制）
+  function tileScreen(z, tx, ty) {
+    var k = Math.pow(2, MAXZ - z);
+    var c = camWorld(), s = scaleFor(cam.zoom);
+    return {
+      x: W / 2 + (tx * TILE * k - c.x) * s,
+      y: H / 2 + (ty * TILE * k - c.y) * s
+    };
+  }
+
+  // 最近一帧画了几张瓦片：self=本层、fallback=祖先兜底、miss=完全没东西可画。
+  // 「放大后一片空白」的表现就是 self+fallback=0 而 miss 满屏，
+  // 所以这个指标直接对应那个 bug，端到端测试拿它当断言。
+  var tileDrawStat = { self: 0, fallback: 0, stitch: 0, miss: 0 };
+
+  function drawTiles() {
+    tileDrawStat = { self: 0, fallback: 0, stitch: 0, miss: 0 };
+    if (!CONFIG.showBasemap) return;
+    var z = tileZoom();
+    var n = Math.pow(2, z);
+
+    var tl = screenToLL({ x: 0, y: 0 });
+    var br = screenToLL({ x: W, y: H });
+    var a = proj(tl.lon, tl.lat), b = proj(br.lon, br.lat);
+    var k = Math.pow(2, MAXZ - z);
+
+    var x0 = Math.floor(a.x / (TILE * k)), x1 = Math.floor(b.x / (TILE * k));
+    var y0 = Math.floor(a.y / (TILE * k)), y1 = Math.floor(b.y / (TILE * k));
+
+    for (var tx = x0; tx <= x1; tx++) {
+      for (var ty = y0; ty <= y1; ty++) {
+        if (tx < 0 || ty < 0 || tx >= n || ty >= n) continue;
+        getTile(z, tx, ty);                     // 保证请求已发出（含重试）
+        var r = readyTile(z, tx, ty);           // 优先自己，其次祖先，再其次后代
+        if (!r) { tileDrawStat.miss++; continue; }
+        var P = tileScreen(z, tx, ty), Q = tileScreen(z, tx + 1, ty + 1);
+        // 对齐到物理像素网格。相邻瓦片的公共边界算出来是同一个值，
+        // 所以对齐后既不会露 1px 缝，也不会因为落在半像素上被重采样糊掉。
+        var dx0 = snapPx(P.x), dy0 = snapPx(P.y);
+        var dx1 = snapPx(Q.x), dy1 = snapPx(Q.y);
+        try {
+          if (r.down) {
+            // 缩小方向：把 2×2 或 4×4 张细瓦片缩着拼进这一格
+            var sub = 1 << r.down;
+            var wdt = (dx1 - dx0) / sub, hgt = (dy1 - dy0) / sub;
+            for (var ii = 0; ii < sub; ii++) {
+              for (var jj = 0; jj < sub; jj++) {
+                var pr = tileCache[tileKey(r.z, r.x * sub + ii, r.y * sub + jj)];
+                if (pr && pr.ok) {
+                  ctx.drawImage(pr.img, dx0 + ii * wdt, dy0 + jj * hgt, wdt, hgt);
+                }
+              }
+            }
+            tileDrawStat.stitch++;
+          } else if (r.up === 0) {
+            ctx.drawImage(r.rec.img, dx0, dy0, dx1 - dx0, dy1 - dy0);
+            tileDrawStat.self++;
+          } else {
+            // 放大方向：祖先瓦片只裁出对应那一小块放大画
+            var cp = ancestorCrop(r.up, tx, ty);
+            ctx.drawImage(r.rec.img, cp.sx, cp.sy, cp.sw, cp.sh,
+              dx0, dy0, dx1 - dx0, dy1 - dy0);
+            tileDrawStat.fallback++;
+          }
+        } catch (e) { /* 单张失败不影响整图 */ }
+      }
+    }
+  }
+
+  // ============================================================
+  // 5. 几何工具
+  // ============================================================
+  var LANE = 8;             // 作业行距，米。真实 = 机宽约 1.2m，演示放大才看得清
+  var SAMPLE = 2;           // 路径点采样间距，米
+  var MOWER_WIDTH = 8;      // 机具作业宽度（割幅），用于覆盖面积与边界内缩
+  var INSET = MOWER_WIDTH / 2;   // 边界内缩 = 半个割幅，否则车体中心贴边会切到区域外
+
+  // 设置页能改行距和作业宽度，改完调这个把派生量一起更新。
+  // 默认值没变，所以不设置时的行为跟以前完全一致。
+  function syncCoverageParams() {
+    LANE = (settings.lane > 0) ? settings.lane : 8;
+    MOWER_WIDTH = (settings.mowerWidth > 0) ? settings.mowerWidth : 8;
+    INSET = MOWER_WIDTH / 2;
+  }
+  var SIMPLIFY_MIN = 0.4;   // 边界抽稀容差下限，米
+  var SIMPLIFY_MAX = 2.0;   // 上限：割幅只有 1.2m，容差比机宽还大就可能切掉窄区域
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function clonePt(p) { return { x: p.x, y: p.y }; }
+  function cloneRect(r) { return { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }; }
+  function cloneCircle(c) { return { x: c.x, y: c.y, r: c.r }; }
+
+  // 圆转成多边形（下发和路径规划都按多边形处理，省得机器人端多一套分支）。
+  // 64 边形相对正圆面积小 0.064%，200 米尺度下误差可以忽略。
+  function circleToPolygon(c, n) {
+    n = n || 64;
+    var out = [];
+    for (var i = 0; i < n; i++) {
+      var a = i / n * Math.PI * 2;
+      out.push({ x: c.x + Math.cos(a) * c.r, y: c.y + Math.sin(a) * c.r });
+    }
+    return out;
+  }
+  function circleArea(r) { return Math.PI * r * r; }
+
+  // '#1668d6' + 0.15 -> 'rgba(22,104,214,0.15)'
+  function hexA(hex, a) {
+    var n = parseInt(hex.replace('#', ''), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  // 屏幕坐标下的重心，用来摆标签
+  function centroid(pts) {
+    var x = 0, y = 0;
+    for (var i = 0; i < pts.length; i++) { x += pts[i].x; y += pts[i].y; }
+    return { x: x / pts.length, y: y / pts.length };
+  }
+
+  // 矩形统一用 {x0,y0,x1,y1} 存，x0<x1、y0<y1 规范化，
+  // 这样角点顺序永远是「左下 → 右下 → 右上 → 左上」，拖角、算面积都不用再判断方向
+  function normRect(r) {
+    return {
+      x0: Math.min(r.x0, r.x1), x1: Math.max(r.x0, r.x1),
+      y0: Math.min(r.y0, r.y1), y1: Math.max(r.y0, r.y1)
+    };
+  }
+  function rectCorners(r) {
+    return [
+      { x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 },
+      { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }
+    ];
+  }
+  var OPP = [2, 3, 0, 1];   // 每个角的对角，拖角时对角固定不动
+
+  // 去掉挨得太近的重复点。
+  // 连点两下会留下两个几乎重合的顶点，下发后那段路径长度为 0，
+  // 机器人容易在那儿原地打转，所以下发前统一清一遍。
+  function dedupe(pts, minDist) {
+    if (!pts || !pts.length) return [];
+    var out = [pts[0]];
+    for (var i = 1; i < pts.length; i++) {
+      if (dist(out[out.length - 1], pts[i]) >= minDist) out.push(pts[i]);
+    }
+    if (out.length > 1 && dist(out[0], out[out.length - 1]) < minDist) out.pop();
+    return out;
+  }
+
+  // 点到线段的最短距离
+  function distToSeg(p, a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var L2 = dx * dx + dy * dy;
+    var t = L2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  }
+
+  // Ramer–Douglas–Peucker 抽稀。
+  // 手指描一圈能采出几十上百个点，直接下发有两个问题：
+  //   1) BLE 单包 MTU 只有 20–512 字节，几百个点必须分包，容易出错又慢
+  //   2) 机器人端路径规划会为这些无意义的抖动点多绕路
+  // 抽稀到「偏离原轨迹不超过 eps 米」的关键点即可，形状看不出差别。
+  function rdp(pts, eps) {
+    if (!pts || pts.length < 3) return (pts || []).slice();
+    var keep = new Array(pts.length);
+    keep[0] = true;
+    keep[pts.length - 1] = true;
+    var stack = [[0, pts.length - 1]];
+    while (stack.length) {
+      var seg = stack.pop(), a = seg[0], b = seg[1];
+      var maxD = -1, idx = -1;
+      for (var i = a + 1; i < b; i++) {
+        var d = distToSeg(pts[i], pts[a], pts[b]);
+        if (d > maxD) { maxD = d; idx = i; }
+      }
+      if (maxD > eps && idx > a) {
+        keep[idx] = true;
+        stack.push([a, idx]);
+        stack.push([idx, b]);
+      }
+    }
+    var out = [];
+    for (var j = 0; j < pts.length; j++) if (keep[j]) out.push(pts[j]);
+    return out;
+  }
+
+  // 近似算 JSON 报文的 UTF-8 字节数（用来盯 BLE 分包）
+  function jsonBytes(o) {
+    var s = JSON.stringify(o), n = 0;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      n += c < 128 ? 1 : c < 2048 ? 2 : 3;
+    }
+    return n;
+  }
+
+  function polygonArea(pts) {
+    if (!pts || pts.length < 3) return 0;
+    var s = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      s += a.x * b.y - b.x * a.y;
+    }
+    return Math.abs(s) / 2;
+  }
+
+  // 射线法：点是否在多边形内（边界附近算内）
+  function pointInPolygon(p, poly) {
+    var inside = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+      if (((yi > p.y) !== (yj > p.y)) &&
+          (p.x < (xj - xi) * (p.y - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+  }
+
+  function cross(o, a, b) {
+    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  }
+  function segIntersect(a1, a2, b1, b2) {
+    var d1 = cross(b1, b2, a1), d2 = cross(b1, b2, a2);
+    var d3 = cross(a1, a2, b1), d4 = cross(a1, a2, b2);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+           ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  }
+  // 边界自相交检测。手指画圈很容易画成「8」字，这种边界下发给机器人，
+  // 它的行驶顺序会很诡异（每个自交处路径要分岔）。宁可提前提醒重画。
+  function selfIntersects(pts) {
+    var n = pts ? pts.length : 0;
+    if (n < 4) return false;
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        // 相邻边共端点，跳过
+        if (j === (i + 1) % n || i === (j + 1) % n) continue;
+        if (segIntersect(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return true;
+      }
+    }
+    return false;
+  }
+
+  // 网格间距取「好看」的整数
+  function niceStep(v) {
+    if (!isFinite(v) || v <= 0) return 10;
+    var p = Math.pow(10, Math.floor(Math.log10(v)));
+    var n = v / p;
+    var m = n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10;
+    return m * p;
+  }
+
+  // ============================================================
+  // 6. 核心：多边形扫描线覆盖路径（牛耕法 / Boustrophedon）
+  //
+  // 1. 取多边形 y 范围，按行距 LANE 逐行推进
+  // 2. 每行求扫描线与多边形所有边的交点，按 x 排序
+  // 3. 交点两两配对 → 落在多边形内部的区间（凹多边形会有多段）
+  // 4. 区间内按 SAMPLE 间距插点
+  // 5. 逐行交替方向（左右 / 右左），首尾相连成弓字形
+  //
+  // inset：边界内缩量，取半个割幅。不内缩的话车体中心会正好压在边界上，
+  // 半个割幅悬在区域外；内缩后车体外沿刚好贴住边界。
+  // 注：这是沿扫描方向的近似内缩，对斜边不是严格的等距偏移（真实规划
+  // 该用 Clipper 之类的多边形偏移库），但避免了车体中心出界。
+  // ============================================================
+  function buildCoveragePath(poly, lane, sample, inset) {
+    if (!poly || poly.length < 3) return [];
+    inset = inset || 0;
+
+    var ys = poly.map(function (p) { return p.y; });
+    var ymin = Math.min.apply(null, ys);
+    var ymax = Math.max.apply(null, ys);
+
+    var lo = ymin + inset, hi = ymax - inset;
+    if (hi - lo < 0.01) return [];            // 区域比机宽还窄，规划不出来
+
+    var effLane = Math.min(lane, hi - lo);
+    var rows = [];
+    var flip = false;
+    var i, y;
+
+    for (y = lo + effLane / 2; y <= hi + 1e-6; y += effLane) {
+      var xs = [];
+      for (i = 0; i < poly.length; i++) {
+        var a = poly[i], b = poly[(i + 1) % poly.length];
+        // 半开区间判定，避免顶点被重复计数
+        if ((a.y <= y && b.y > y) || (b.y <= y && a.y > y)) {
+          xs.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+        }
+      }
+      if (xs.length < 2) continue;
+      xs.sort(function (p, q) { return p - q; });
+
+      var spans = [];
+      for (i = 0; i + 1 < xs.length; i += 2) {
+        var x0 = xs[i] + inset, x1 = xs[i + 1] - inset;
+        if (x1 - x0 > 1e-6) spans.push([x0, x1]);
+      }
+      if (!spans.length) continue;
+
+      var rowPts = [];
+      if (!flip) {
+        for (i = 0; i < spans.length; i++) pushSpan(rowPts, spans[i][0], spans[i][1], y, sample);
+      } else {
+        for (i = spans.length - 1; i >= 0; i--) pushSpan(rowPts, spans[i][1], spans[i][0], y, sample);
+      }
+      rows.push(rowPts);
+      flip = !flip;
+    }
+
+    var path = [];
+    for (i = 0; i < rows.length; i++) {
+      for (var q = 0; q < rows[i].length; q++) path.push(rows[i][q]);
+    }
+    return path;
+  }
+
+  function pushSpan(out, xFrom, xTo, y, sample) {
+    var len = Math.abs(xTo - xFrom);
+    var steps = Math.max(1, Math.round(len / sample));
+    var dir = xTo >= xFrom ? 1 : -1;
+    for (var i = 0; i <= steps; i++) {
+      out.push({ x: xFrom + dir * len * (i / steps), y: y });
+    }
+  }
+
+  function pathLength(path) {
+    var L = 0;
+    for (var i = 1; i < path.length; i++) L += dist(path[i - 1], path[i]);
+    return L;
+  }
+
+  // 单块区域的点数上限。
+  // 为什么要卡：BLE 单个 ATT 包的 payload 常见只有 244 B（MTU 247），
+  // 一个点约 20 B，十几个点就装不下了 —— 报文必然要分片，这是原生层的事。
+  // 前端只负责把形状精度控制在人能接受的范围内：64 个点足够描述任何球场地块，
+  // 再多的点人眼也看不出差别，纯粹是给协议和机器人规划器添麻烦。
+  var MAX_AREA_POINTS = 64;
+
+  // 点数超限就把 RDP 容差翻倍重抽，直到降到上限以内
+  function simplifyToLimit(pts, limit) {
+    if (pts.length <= limit) return pts;
+    var tol = 0.5;
+    var out = rdp(pts, tol);
+    while (out.length > limit && tol < 128) {
+      tol *= 2;
+      out = rdp(pts, tol);
+    }
+    return out.length >= 3 ? out : pts;
+  }
+
+  // 多块区域：各自规划，再按顺序接成一条作业路径。
+  // 真实产品要在机器人端做避障、掉头和跨区转场优化，这份前端规划只用来
+  // 让操作员看到「大概要跑多远、覆盖多少面积」，不直接驱动电机。
+  function buildMultiPath(areas) {
+    var out = [];
+    for (var i = 0; i < areas.length; i++) {
+      var pts = areas[i].points;
+      if (!pts || pts.length < 3) continue;
+      var seg = buildCoveragePath(pts, LANE, SAMPLE, INSET);
+      for (var j = 0; j < seg.length; j++) out.push(seg[j]);
+    }
+    return out;
+  }
+
+  // ============================================================
+  // 7. 状态
+  // ============================================================
+  var state = {
+    // 界面上永远只有一块「编辑中的草稿」，tool 决定怎么画它。
+    // 画好点「新建区域」收进 areas（可多块，各带颜色），然后接着画下一块。
+    tool: 'browse',        // browse（看地图） | rect（拖矩形） | circle（拖圆） | poly（点点连线）
+    mode: 'zone',          // zone（手动圈地） | boundary（场地标定）
+    vertices: [],          // poly 草稿：顶点数组（米）
+    closed: false,         // 顶点 >= 3 自动闭合，没有「手动闭合」这个动作了
+    dragIndex: null,
+    rect: null,            // rect 草稿：{x0,y0,x1,y1} 米
+    rectDraft: null,       // 拖拽过程中的草稿
+    circle: null,          // circle 草稿：{x, y, r} 米
+    circleDraft: null,
+    pressIndex: null,      // 长按中的顶点索引（长按 = 删除该点）
+    pressFrom: null,
+    pressMoved: false,
+    pressTimer: null,
+    undoVertices: null,    // 一层备份：被顶掉的上一块形状，撤销能找回来
+    undoRect: null,
+    undoCircle: null,
+    selfX: false,          // 边界是否自相交
+
+    // ---- 多区域 ----
+    areas: [],             // 已圈好的区域：{id,name,kind,points,areaM2,color,...}
+    editingId: null,       // 正在编辑的已有区域 id（点区域标签取出来改）
+    seq: 0,                // 编号计数，用来命名「区域 1/2/3」
+    undoArea: null,        // 撤销：最近删掉/被顶掉的一块区域
+
+    sent: false,           // 是否已下发
+    robot: { x: 0, y: 0, heading: 0, battery: 82, mileage: 0 },
+    trail: [],
+    running: false,
+    path: [],
+    planLength: 0,
+    pathIndex: 0,
+    segProgress: 0,
+    mileage: 0,            // 本次作业已行驶里程（米）—— 漏了它会让「已清扫」变成 NaN
+    covered: 0
+  };
+
+  // 区域配色，按创建顺序循环取，用来在图上区分不同的地
+  var AREA_COLORS = ['#1668d6', '#c26a00', '#12855a', '#8b3fd6',
+                     '#c2185b', '#0d7c8c', '#8a6d00', '#5b4bc4'];
+  function colorFor(i) { return AREA_COLORS[i % AREA_COLORS.length]; }
+
+  var myPos = null;        // {lon, lat, acc, heading, src, ts}
+  var demoWalker = null;   // 浏览器定位不可用时的演示位置
+
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var W = 0, H = 0, DPR = 1, mpp = 0.5;
+
+  function resize() {
+    var r = cv.parentElement.getBoundingClientRect();
+    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * DPR);
+    cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    // 瓦片源像素和物理像素不是整倍关系时（清晰度=标准/省流、或已到最高层级），
+    // 这里决定放大后的观感。high 比默认的低质量双线性明显少锯齿。
+    ctx.imageSmoothingQuality = 'high';
+    syncScale();
+  }
+
+  // ============================================================
+  // 8. 绘制
+  // ============================================================
+  function drawGrid() {
+    if (!CONFIG.showGrid) return;        // 设置页可关：影像够清楚时网格反而碍事
+    var step = niceStep(mpp * 90);
+    var bl = screenToM({ x: 0, y: H });
+    var tr = screenToM({ x: W, y: 0 });
+    var minor = CONFIG.showBasemap ? 'rgba(255,255,255,.28)' : '#e4ebf2';
+    var axis = CONFIG.showBasemap ? 'rgba(255,255,255,.62)' : '#c9d6e2';
+
+    ctx.lineWidth = 1;
+    var i, s;
+    var x0 = Math.floor(bl.x / step) * step, x1 = Math.ceil(tr.x / step) * step;
+    var y0 = Math.floor(bl.y / step) * step, y1 = Math.ceil(tr.y / step) * step;
+
+    for (i = x0; i <= x1; i += step) {
+      if (Math.abs(i) < 1e-6) continue;
+      s = mToScreen({ x: i, y: 0 }).x;
+      ctx.strokeStyle = minor;
+      ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(s, H); ctx.stroke();
+    }
+    for (i = y0; i <= y1; i += step) {
+      if (Math.abs(i) < 1e-6) continue;
+      s = mToScreen({ x: 0, y: i }).y;
+      ctx.strokeStyle = minor;
+      ctx.beginPath(); ctx.moveTo(0, s); ctx.lineTo(W, s); ctx.stroke();
+    }
+    // 过原点的两条轴
+    var o = mToScreen({ x: 0, y: 0 });
+    ctx.strokeStyle = axis;
+    ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
+  }
+
+  function drawOriginMark() {
+    var o = mToScreen({ x: 0, y: 0 });
+    if (o.x < -40 || o.y < -40 || o.x > W + 40 || o.y > H + 40) return;
+    ctx.strokeStyle = CONFIG.showBasemap ? 'rgba(255,255,255,.9)' : '#8798a9';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(o.x - 7, o.y); ctx.lineTo(o.x + 7, o.y);
+    ctx.moveTo(o.x, o.y - 7); ctx.lineTo(o.x, o.y + 7);
+    ctx.stroke();
+    ctx.font = '10px -apple-system,sans-serif';
+    ctx.fillStyle = CONFIG.showBasemap ? 'rgba(255,255,255,.9)' : '#8798a9';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('原点 (0,0)', o.x + 9, o.y + 3);
+  }
+
+  // 已圈好的多块区域：各自配色，淡填充 + 虚线描边。
+  // 已下发的换成实线、加粗，一眼区分「圈好了」和「已经交给机器人了」。
+  function drawAreas() {
+    for (var i = 0; i < state.areas.length; i++) {
+      var a = state.areas[i];
+      if (state.editingId === a.id) continue;    // 正在改的那块交给 drawEditable 高亮画
+      var pts = a.points.map(mToScreen);
+      if (pts.length < 3) continue;
+      var on = state.sent && a.sent;
+      ctx.beginPath();
+      for (var j = 0; j < pts.length; j++) {
+        j ? ctx.lineTo(pts[j].x, pts[j].y) : ctx.moveTo(pts[j].x, pts[j].y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = hexA(a.color, on ? 0.15 : 0.08);
+      ctx.fill();
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = on ? 2.5 : 1.5;
+      if (!on) ctx.setLineDash([7, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      var c = centroid(pts);
+      label(a.name + ' · ' + a.areaM2 + ' m²', c.x, c.y);
+    }
+  }
+
+  function drawPlannedPath() {
+    if (state.path.length < 2) return;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = 'rgba(22,104,214,.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (var i = 0; i < state.path.length; i++) {
+      var p = mToScreen(state.path[i]);
+      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawTrail() {
+    if (state.trail.length < 2) return;
+    ctx.strokeStyle = 'rgba(18,133,90,.6)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (var i = 0; i < state.trail.length; i++) {
+      var p = mToScreen(state.trail[i]);
+      i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  // 正在编辑的形状。
+  // rect：4 个角手柄拖大小，拖矩形内部整体移动
+  // poly：顶点可拖，边中点可点（插入新点），长按/双击顶点删除，拖空白整体移动
+  var VERT_R = 7.5;         // 顶点手柄半径（px）
+  var MID_R = 5.5;          // 边中点手柄半径。卫星图底图上太小的圆看不见，会变成「藏起来的操作」
+  var HIT_VERT = 20;        // 顶点命中半径（px）
+  var HIT_MID = 15;         // 中点命中半径（px）
+  var MAX_MID_HANDLES = 16; // 顶点超过这个数就不显示中点了，否则糊成一片
+
+  function drawEditable() {
+    var i, p;
+    var editable = (state.tool === 'rect' || state.tool === 'poly');
+
+    // ---- 矩形 ----
+    if (state.rect) {
+      var rc = rectCorners(state.rect).map(mToScreen);
+      outline(rc, 'rgba(22,104,214,.12)', '#1668d6', 2);
+      if (state.tool === 'rect' && editable) {
+        for (i = 0; i < 4; i++) {
+          handle(rc[i].x, rc[i].y, i === 0 ? '#12855a' : '#ffffff', '#1668d6');
+        }
+        rectLabel(state.rect, rc);
+      }
+    }
+    if (state.rectDraft) {
+      var dc = rectCorners(normRect(state.rectDraft)).map(mToScreen);
+      outline(dc, 'rgba(22,104,214,.10)', 'rgba(22,104,214,.8)', 2, [6, 4]);
+      rectLabel(state.rectDraft, dc);
+    }
+
+    // ---- 圆形 ----
+    if (state.circle && state.circle.r > 0) {
+      var cc = mToScreen(state.circle);
+      var edge = mToScreen({ x: state.circle.x + state.circle.r, y: state.circle.y });
+      var rpx = Math.abs(edge.x - cc.x);
+      ctx.beginPath();
+      ctx.arc(cc.x, cc.y, rpx, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(22,104,214,.12)';
+      ctx.fill();
+      ctx.strokeStyle = '#1668d6';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (state.tool === 'circle') {
+        // 圆心手柄（绿）+ 半径手柄（白），跟矩形的角手柄是一套操作习惯
+        handle(cc.x, cc.y, '#12855a', '#1668d6');
+        handle(cc.x + rpx, cc.y, '#ffffff', '#1668d6');
+        label('半径 ' + state.circle.r.toFixed(1) + ' m', cc.x, cc.y - rpx - 12);
+      }
+    }
+
+    // ---- 多边形 ----
+    if (state.vertices.length > 1) {
+      var vp = state.vertices.map(mToScreen);
+      var willClose = state.vertices.length >= 3;
+      ctx.beginPath();
+      for (i = 0; i < vp.length; i++) {
+        i ? ctx.lineTo(vp[i].x, vp[i].y) : ctx.moveTo(vp[i].x, vp[i].y);
+      }
+      if (willClose) {
+        ctx.closePath();                 // 够 3 个点就自己连回起点，不需要手动闭合
+        ctx.fillStyle = 'rgba(22,104,214,.12)';
+        ctx.fill();
+      }
+      ctx.strokeStyle = '#1668d6';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      if (!willClose) ctx.setLineDash([6, 4]);   // 还没成区域的线用虚线，暗示"还差几个点"
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 边中点：点一下就在这条边上插一个新点。
+    // 画成「白底 + 蓝边 + 中心点」，跟实心的顶点手柄区分开，在卫星图上也能看清。
+    if (state.tool === 'poly' && state.vertices.length >= 2 &&
+        state.vertices.length <= MAX_MID_HANDLES) {
+      var n = state.vertices.length;
+      var edges = n >= 3 ? n : n - 1;
+      for (i = 0; i < edges; i++) {
+        var a = state.vertices[i], b = state.vertices[(i + 1) % n];
+        var mid = mToScreen({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        ctx.beginPath();
+        ctx.arc(mid.x, mid.y, MID_R, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,.92)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(22,104,214,.95)';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(mid.x, mid.y, 1.9, 0, Math.PI * 2);
+        ctx.fillStyle = '#1668d6';
+        ctx.fill();
+      }
+    }
+
+    // 顶点手柄。浏览模式不画手柄，免得挡着看地图
+    if (state.tool === 'poly') {
+      for (i = 0; i < state.vertices.length; i++) {
+        p = mToScreen(state.vertices[i]);
+        var hot = (i === state.dragIndex || i === state.pressIndex);
+        handle(p.x, p.y,
+          i === 0 ? '#12855a' : '#ffffff',
+          hot ? '#c26a00' : '#1668d6',
+          hot ? VERT_R + 2.5 : VERT_R);
+      }
+    }
+  }
+
+  function outline(pts, fill, stroke, lw, dash) {
+    ctx.beginPath();
+    for (var i = 0; i < pts.length; i++) {
+      i ? ctx.lineTo(pts[i].x, pts[i].y) : ctx.moveTo(pts[i].x, pts[i].y);
+    }
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (dash) ctx.setLineDash(dash);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+    if (dash) ctx.setLineDash([]);
+  }
+
+  function rectLabel(r, corners) {
+    var w = Math.abs(r.x1 - r.x0), h = Math.abs(r.y1 - r.y0);
+    label(w.toFixed(1) + ' × ' + h.toFixed(1) + ' m',
+      (corners[0].x + corners[2].x) / 2, (corners[0].y + corners[2].y) / 2);
+  }
+
+  function handle(x, y, fill, stroke, r) {
+    ctx.beginPath();
+    ctx.arc(x, y, r || VERT_R, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke || '#1668d6';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 带白底的小标签，压在地图上也能看清
+  function label(text, cx, cy) {
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    var tw = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(255,255,255,.88)';
+    ctx.fillRect(cx - tw / 2 - 5, cy - 8, tw + 10, 16);
+    ctx.fillStyle = '#12212e';
+    ctx.fillText(text, cx, cy + 0.5);
+  }
+
+  // 当前位置（蓝点 + 精度圈）
+  function drawMyPos() {
+    if (!myPos) return;
+    var s = llToScreen(myPos);
+    var isDemo = myPos.src === 'demo';
+
+    if (myPos.acc > 0) {
+      var rpx = Math.min(myPos.acc / mpp, 3000);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, rpx, 0, Math.PI * 2);
+      ctx.fillStyle = isDemo ? 'rgba(120,135,150,.12)' : 'rgba(22,104,214,.10)';
+      ctx.fill();
+      ctx.strokeStyle = isDemo ? 'rgba(120,135,150,.45)' : 'rgba(22,104,214,.35)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // 朝向扇形
+    if (typeof myPos.heading === 'number' && !isNaN(myPos.heading)) {
+      var h = -myPos.heading * Math.PI / 180 + Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.arc(s.x, s.y, 40, h - 0.45, h + 0.45);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(22,104,214,.18)';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = isDemo ? '#8798a9' : '#1668d6';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    if (isDemo) {
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(120,135,150,.9)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  function drawRobot() {
+    var r = mToScreen({ x: state.robot.x, y: state.robot.y });
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(-state.robot.heading);
+    ctx.beginPath();
+    ctx.arc(0, 0, 11, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#1668d6';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(4, 0);
+    ctx.lineTo(15, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawScaleBar() {
+    var cands = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+    var L = cands[cands.length - 1];
+    for (var i = 0; i < cands.length; i++) {
+      if (cands[i] / mpp >= 62) { L = cands[i]; break; }
+    }
+    var px = L / mpp;
+    var x = 12, y = H - 26;
+
+    ctx.fillStyle = 'rgba(255,255,255,.78)';
+    ctx.fillRect(x - 7, y - 5, px + 14, 26);
+    ctx.strokeStyle = '#3d4f60';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + px, y);
+    ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 5);
+    ctx.moveTo(x + px, y - 4); ctx.lineTo(x + px, y + 5);
+    ctx.stroke();
+    ctx.font = '11px -apple-system,sans-serif';
+    ctx.fillStyle = '#3d4f60';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(L + ' m', x + px / 2, y + 7);
+  }
+
+  function draw() {
+    syncScale();
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#e6edf3';
+    ctx.fillRect(0, 0, W, H);
+
+    drawTiles();
+    drawGrid();
+    drawAreas();          // 已圈好的多块区域（虚线），各配一色
+    drawOriginMark();
+    drawPlannedPath();
+    drawTrail();
+    drawEditable();       // 当前草稿画在最上面，手柄不会被别的区域压住
+    drawMyPos();
+    drawRobot();
+    drawScaleBar();
+  }
+
+  // ============================================================
+  // 9. 读数与指标
+  // ============================================================
+  function rd(id) { return document.getElementById(id); }
+
+  function updateReadout() {
+    var cm = lonLatToLocal(cam.lon, cam.lat);
+    rd('rdCenter').innerHTML = '中心 <b>' + cam.lat.toFixed(6) + ', ' + cam.lon.toFixed(6) + '</b>';
+    rd('rdPlane').innerHTML = '平面 <b>(' + cm.x.toFixed(1) + ', ' + cm.y.toFixed(1) + ') m</b>' +
+      ' · z' + cam.zoom.toFixed(1) + ' · ' + mpp.toFixed(2) + ' m/px';
+    if (myPos) {
+      rd('rdMine').innerHTML = '定位 <b>' + myPos.lat.toFixed(6) + ', ' + myPos.lon.toFixed(6) + '</b>' +
+        ' ±' + Math.round(myPos.acc) + ' m · ' + (myPos.src === 'demo' ? '演示' : 'RTK');
+    } else {
+      rd('rdMine').textContent = '定位 未获取，点右上角「定位」';
+    }
+  }
+
+  // 当前编辑的草稿：三选一（矩形 / 圆形 / 多边形）
+  function activePoints() {
+    if (state.rect) return rectCorners(state.rect);
+    if (state.circle && state.circle.r > 0.5) return circleToPolygon(state.circle, 64);
+    return state.vertices;
+  }
+  function activeKind() {
+    if (state.rect) return 'rect';
+    if (state.circle && state.circle.r > 0.5) return 'circle';
+    return state.vertices.length ? 'poly' : null;
+  }
+
+  function draftValid() {
+    var k = activeKind();
+    if (!k) return false;
+    if (k === 'circle') return state.circle.r > 0.5;
+    return polygonArea(activePoints()) > 0.5;
+  }
+
+  // 当前草稿 -> 一块区域对象（不含 id / name / color，由 commitDraft 补）
+  function draftToArea() {
+    var kind = activeKind();
+    if (!kind) return null;
+    var pts = activePoints().map(function (p) {
+      return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+    });
+    var a = { kind: kind, points: pts, areaM2: +polygonArea(pts).toFixed(1), sent: false };
+    if (kind === 'rect') {
+      var r = normRect(state.rect);
+      a.rect = { x0: +r.x0.toFixed(2), y0: +r.y0.toFixed(2), x1: +r.x1.toFixed(2), y1: +r.y1.toFixed(2) };
+      a.sizeM = { w: +(r.x1 - r.x0).toFixed(2), h: +(r.y1 - r.y0).toFixed(2) };
+    } else if (kind === 'circle') {
+      a.center = { x: +state.circle.x.toFixed(2), y: +state.circle.y.toFixed(2) };
+      a.radiusM = +state.circle.r.toFixed(2);
+    }
+    return a;
+  }
+
+  // 已有区域 -> 草稿（点区域标签把它取出来接着改）
+  function areaToDraft(a) {
+    clearDraft();
+    if (a.kind === 'rect' && a.rect) state.rect = cloneRect(a.rect);
+    else if (a.kind === 'circle' && a.center) state.circle = { x: a.center.x, y: a.center.y, r: a.radiusM };
+    else state.vertices = a.points.map(clonePt);
+    state.closed = a.kind === 'poly';
+  }
+
+  function clearDraft() {
+    state.rect = null;
+    state.rectDraft = null;
+    state.circle = null;
+    state.circleDraft = null;
+    state.vertices = [];
+    state.closed = false;
+    state.dragIndex = null;
+    state.selfX = false;
+    clearPress();
+  }
+
+  function areaById(id) {
+    for (var i = 0; i < state.areas.length; i++) {
+      if (state.areas[i].id === id) return state.areas[i];
+    }
+    return null;
+  }
+
+  // 新建区域：把当前草稿收进 areas，接着画下一块。
+  // 如果当前是在改一块已有区域（editingId），就是覆盖更新它。
+  function commitDraft(silent) {
+    if (!draftValid()) return null;
+    var a = draftToArea();
+    var cur = state.editingId ? areaById(state.editingId) : null;
+    if (cur) {
+      a.id = cur.id;
+      a.name = cur.name;
+      a.color = cur.color;
+      state.areas[state.areas.indexOf(cur)] = a;
+      state.editingId = null;
+      clearDraft();
+      if (!silent) toast('「' + a.name + '」已更新 · ' + a.areaM2 + ' m²');
+      return a;
+    }
+    state.seq++;
+    a.id = 'a' + state.seq;
+    a.name = '区域 ' + state.seq;
+    a.color = colorFor(state.areas.length);
+    state.areas.push(a);
+    clearDraft();
+    if (!silent) {
+      toast('已添加「' + a.name + '」' + a.areaM2 + ' m²\n可以接着画下一块，或点「下发区域」');
+    }
+    return a;
+  }
+
+  function deleteArea(id) {
+    var a = areaById(id);
+    if (!a) return;
+    state.undoArea = a;
+    state.areas.splice(state.areas.indexOf(a), 1);
+    if (state.editingId === id) { state.editingId = null; clearDraft(); }
+    refresh();
+    toast('已删除「' + a.name + '」· 点「撤销」可恢复');
+  }
+
+  function editArea(id) {
+    if (state.editingId === id) return;
+    commitDraft(true);              // 手上这块先收起来，别丢
+    var a = areaById(id);
+    if (!a) return;
+    state.editingId = id;
+    areaToDraft(a);
+    state.tool = a.kind;
+    syncSeg();
+    refresh();
+  }
+
+  // 要下发的全部区域 = 已收起的 + 当前还没收起的有效草稿
+  function allAreas() {
+    var out = state.areas.slice();
+    if (draftValid()) {
+      var cur = state.editingId ? areaById(state.editingId) : null;
+      if (!cur) {
+        var d = draftToArea();
+        d.id = 'draft';
+        d.name = '当前区域';
+        d.color = colorFor(out.length);
+        out.push(d);
+      }
+    }
+    return out;
+  }
+
+  function totalArea() {
+    return allAreas().reduce(function (s, a) { return s + a.areaM2; }, 0);
+  }
+
+  // 下发前的兜底抽稀阈值。点选模式最多也就十几个点，正常用不上，
+  // 留着是防「导入轨迹」这类入口灌进来几百个点。
+  function simplifyTol() { return Math.min(SIMPLIFY_MAX, Math.max(SIMPLIFY_MIN, mpp * 2)); }
+
+  function pushUndoVertices() {
+    if (state.vertices.length) state.undoVertices = state.vertices.map(clonePt);
+  }
+
+  // 顶点增删改之后统一走这里：重算闭合状态和自相交
+  function afterVertexChange() {
+    state.closed = state.vertices.length >= 3;
+    state.selfX = state.closed && selfIntersects(state.vertices);
+    refresh();
+  }
+
+  function addVertexAt(m) {
+    var n = state.vertices.length;
+    if (n && dist(state.vertices[n - 1], m) < 0.3) return;   // 和上一个点几乎重合，忽略
+    pushUndoVertices();
+    state.vertices.push(m);
+    afterVertexChange();
+  }
+
+  function deleteVertex(i) {
+    if (i < 0 || i >= state.vertices.length) return;
+    pushUndoVertices();
+    state.vertices.splice(i, 1);
+    state.dragIndex = null;
+    afterVertexChange();
+    toast('已删除 1 个点 · 剩 ' + state.vertices.length + ' 个' +
+      (state.vertices.length < 3 ? '\n不足 3 个点就构不成区域了' : ''));
+  }
+
+  // 拖角：对角固定不动，跟手的那个角改大小
+  function dragCorner(i, m) {
+    if (!state.rect) return;
+    var anchor = rectCorners(state.rect)[OPP[i]];
+    state.rect = normRect({ x0: anchor.x, y0: anchor.y, x1: m.x, y1: m.y });
+  }
+
+  function finishRect() {
+    var d = state.rectDraft;
+    state.rectDraft = null;
+    if (!d) return;
+    var r = normRect(d);
+    // 只是点了一下、或者拉得太小 —— 当成误触，不生成
+    if (r.x1 - r.x0 < 0.5 || r.y1 - r.y0 < 0.5) { refresh(); return; }
+    if (state.rect) state.undoRect = cloneRect(state.rect);
+    state.rect = r;
+    state.undoVertices = null;
+    refresh();
+    toast('矩形已就绪 ' + (r.x1 - r.x0).toFixed(1) + ' × ' + (r.y1 - r.y0).toFixed(1) + ' m\n' +
+      '拖角改大小 · 拖内部整体移动');
+  }
+
+  // ============================================================
+  // 长按顶点 = 删除。拖动超过阈值就取消长按，避免「想拖结果被删了」
+  // ============================================================
+  var PRESS_MS = 480, PRESS_TOL = 8;
+
+  function startPress(i, sp) {
+    clearPress();
+    state.pressIndex = i;
+    state.pressFrom = sp;
+    state.pressMoved = false;
+    state.pressTimer = setTimeout(function () {
+      if (state.pressIndex === i && !state.pressMoved) {
+        state.dragIndex = null;
+        gesture = { type: '' };
+        deleteVertex(i);
+      }
+    }, PRESS_MS);
+  }
+  function markPressMoved(sp) {
+    if (state.pressIndex === null || state.pressMoved || !state.pressFrom) return;
+    if (Math.hypot(sp.x - state.pressFrom.x, sp.y - state.pressFrom.y) > PRESS_TOL) {
+      state.pressMoved = true;
+    }
+  }
+  function clearPress() {
+    if (state.pressTimer) clearTimeout(state.pressTimer);
+    state.pressTimer = null;
+    state.pressIndex = null;
+    state.pressFrom = null;
+  }
+
+  // 区域标签行：每块地一个 chip，点一下取出来接着改，点 × 删掉
+  function renderAreaChips() {
+    var box = document.getElementById('areas');
+    var html = '';
+    for (var i = 0; i < state.areas.length; i++) {
+      var a = state.areas[i];
+      var on = state.editingId === a.id;
+      html += '<span class="area' + (on ? ' on' : '') + '" data-area="' + a.id + '">' +
+        '<i class="swatch" style="background:' + a.color + '"></i>' +
+        a.name + ' · ' + a.areaM2.toFixed(0) + ' m²' +
+        '<b class="x" data-del="' + a.id + '">×</b></span>';
+    }
+    box.innerHTML = html;
+    var els = box.querySelectorAll ? box.querySelectorAll('.area') : [];
+    Array.prototype.forEach.call(els, function (el) {
+      el.addEventListener('click', function (e) {
+        var del = e.target && e.target.getAttribute ? e.target.getAttribute('data-del') : null;
+        if (del) { e.stopPropagation(); deleteArea(del); return; }
+        editArea(el.getAttribute('data-area'));
+      });
+    });
+  }
+
+  function refresh() {
+    syncScale();
+    var kind = activeKind();
+    var areas = allAreas();
+    var total = 0;
+    for (var ai = 0; ai < areas.length; ai++) total += areas[ai].areaM2;
+
+    document.getElementById('mPts').textContent =
+      kind === 'rect' ? '矩形' :
+      kind === 'circle' ? '圆形' :
+      kind === 'poly' ? String(state.vertices.length) : '0';
+    document.getElementById('mArea').textContent = total.toFixed(1);
+    document.getElementById('mPlan').textContent =
+      (state.path.length > 1 ? state.planLength : 0).toFixed(1);
+    document.getElementById('mCovered').textContent = state.covered.toFixed(1);
+    document.getElementById('battery').textContent = Math.round(state.robot.battery) + '%';
+
+    document.getElementById('btnSend').disabled = areas.length === 0;
+    document.getElementById('btnSend').textContent =
+      areas.length > 1 ? '下发 ' + areas.length + ' 块区域' : '下发区域';
+    document.getElementById('btnRun').disabled = !state.sent;
+    document.getElementById('btnRun').textContent = state.running ? '暂停作业' : '开始作业';
+    var nb = document.getElementById('btnNewArea');
+    nb.disabled = !draftValid() && !state.editingId;
+    nb.textContent = state.editingId ? '✓ 保存修改' : '＋ 新建区域';
+    nb.className = 'mini' + (draftValid() && !state.editingId ? ' hot' : '');
+    document.getElementById('modeTag').textContent =
+      state.mode === 'zone' ? '手动圈地' : '场地标定';
+    document.getElementById('modeTag').className = 'pill' + (state.mode === 'zone' ? '' : ' on');
+    document.getElementById('btnCalib').className = 'mini' + (state.mode === 'boundary' ? ' on' : '');
+    document.getElementById('btnLocate').className = CONFIG.follow ? 'on' : '';
+    document.getElementById('btnBase').textContent = CONFIG.showBasemap ? '底图' : '网格';
+    document.getElementById('btnUndo').disabled =
+      !state.rect && !state.circle && !state.vertices.length &&
+      !state.undoRect && !state.undoCircle && !state.undoArea &&
+      !(state.undoVertices && state.undoVertices.length);
+    cv.className = state.tool === 'browse' ? '' : 'drawing';
+
+    renderAreaChips();
+
+    // 操作提示：每种模式把「能做什么」写全，别让人猜
+    var hint;
+    var vn = state.vertices.length;
+    var warn = basemapWarning();
+    if (warn) {
+      hint = warn;
+    } else if (state.selfX) {
+      hint = '边界自相交（线条交叉了）· 拖动顶点把它理顺，或撤销重画';
+    } else if (state.tool === 'rect') {
+      hint = state.rect
+        ? '拖白色的角改大小 · 拖矩形内部整体移动 · 点「＋ 新建区域」再圈下一块'
+        : '在地图上按住拖出矩形范围（松手即成型）';
+    } else if (state.tool === 'circle') {
+      hint = state.circle
+        ? '拖圆心整体挪 · 拖边缘白点改半径 · 点「＋ 新建区域」再圈下一块'
+        : '按住确定圆心，拖出半径（松手即成型）';
+    } else if (state.tool === 'poly') {
+      if (vn === 0) hint = '点一下放下第一个点，继续点下去就会连成区域';
+      else if (vn < 3) hint = '已放 ' + vn + ' 个点 · 再点 ' + (3 - vn) + ' 个就能围成区域';
+      else hint = '拖顶点改位置 · 双击或长按顶点删点 · 点边上的小圈加点 · 拖空白平移整块';
+    } else if (areas.length) {
+      hint = '共 ' + areas.length + ' 块区域 / ' + total.toFixed(0) + ' m²' +
+        (state.sent ? ' · 已下发，点「开始作业」' : ' · 点「下发区域」交给机器人') +
+        ' · 点上面的标签可以取出某一块来改';
+    } else {
+      hint = '单指拖动平移 · 双指缩放 · 用「矩形 / 圆形 / 多边形」圈出要作业的地块';
+    }
+    document.getElementById('hint').innerHTML = '<span>' + hint + '</span>';
+
+    if (!Bridge.hasNative()) {
+      document.getElementById('linkText').textContent = '浏览器演示 · 未连接设备';
+    }
+
+    updateReadout();
+    draw();
+  }
+
+  var toastTimer = null;
+  function toast(text) {
+    var el = document.getElementById('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+
+  // ============================================================
+  // 10. 手势：单指平移/绘制，双指缩放，滚轮缩放，惯性
+  // ============================================================
+  var ptrs = {};        // pointerId -> 屏幕点
+  var ptrCount = 0;
+  var gesture = { type: '' };
+  var ivx = 0, ivy = 0; // 惯性速度（px/s）
+
+  function localPoint(e) {
+    var r = cv.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  function idsOf() { return Object.keys(ptrs); }
+
+  function nearestVertex(sp) {
+    var best = null, bestD = HIT_VERT;
+    for (var i = 0; i < state.vertices.length; i++) {
+      var v = mToScreen(state.vertices[i]);
+      var d = Math.hypot(v.x - sp.x, v.y - sp.y);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  // 边中点命中：返回值是「插在第几个索引位置」
+  function hitEdgeMid(sp) {
+    var n = state.vertices.length;
+    if (n < 2 || n > MAX_MID_HANDLES) return null;
+    var edges = n >= 3 ? n : n - 1;
+    var best = null, bestD = HIT_MID;
+    for (var i = 0; i < edges; i++) {
+      var a = state.vertices[i], b = state.vertices[(i + 1) % n];
+      var mid = mToScreen({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      var d = Math.hypot(mid.x - sp.x, mid.y - sp.y);
+      if (d < bestD) { bestD = d; best = i + 1; }
+    }
+    return best;
+  }
+
+  function hitRectCorner(sp) {
+    if (!state.rect) return null;
+    var c = rectCorners(state.rect);
+    for (var i = 0; i < 4; i++) {
+      var p = mToScreen(c[i]);
+      if (Math.hypot(p.x - sp.x, p.y - sp.y) < HIT_VERT) return i;
+    }
+    return null;
+  }
+
+  function hitRectInside(sp) {
+    if (!state.rect) return false;
+    var m = screenToM(sp), r = state.rect;
+    return m.x >= r.x0 && m.x <= r.x1 && m.y >= r.y0 && m.y <= r.y1;
+  }
+
+  function startPan(sp) {
+    gesture = { type: 'pan', last: sp };
+    CONFIG.follow = false;
+    ivx = ivy = 0;
+  }
+
+  // 圆在屏幕上的圆心与半径像素
+  function circlePixels() {
+    var c = mToScreen(state.circle);
+    var e = mToScreen({ x: state.circle.x + state.circle.r, y: state.circle.y });
+    return { c: c, r: Math.abs(e.x - c.x) };
+  }
+  function hitCircleCenter(sp) {
+    if (!state.circle) return false;
+    var g = circlePixels();
+    return Math.hypot(sp.x - g.c.x, sp.y - g.c.y) < HIT_VERT + 4;
+  }
+  function hitCircleEdge(sp) {
+    if (!state.circle || state.circle.r <= 0) return false;
+    var g = circlePixels();
+    // 只认右边那个白点手柄，跟矩形拖角是同一套手感
+    return Math.hypot(sp.x - (g.c.x + g.r), sp.y - g.c.y) < HIT_VERT + 4;
+  }
+
+  function onSingleDown(e) {
+    var sp = localPoint(e);
+    var m = screenToM(sp);
+
+    if (state.tool === 'browse') { startPan(sp); return; }
+
+    // ---------------- 矩形：按下拖出范围，拖角改大小，拖内部整体移动 ----------------
+    if (state.tool === 'rect') {
+      if (state.rect) {
+        var ci = hitRectCorner(sp);
+        if (ci !== null) { gesture = { type: 'rectCorner', corner: ci }; return; }
+        if (hitRectInside(sp)) {
+          gesture = { type: 'rectMove', start: m, orig: cloneRect(state.rect) };
+          return;
+        }
+      }
+      state.rectDraft = { x0: m.x, y0: m.y, x1: m.x, y1: m.y };
+      gesture = { type: 'rectNew' };
+      refresh();
+      return;
+    }
+
+    // ---------------- 圆形：按住定圆心拖半径，拖圆心整体挪 ----------------
+    if (state.tool === 'circle') {
+      if (state.circle) {
+        if (hitCircleCenter(sp)) {
+          gesture = { type: 'circleMove', start: m, orig: cloneCircle(state.circle) };
+          return;
+        }
+        if (hitCircleEdge(sp)) {
+          gesture = { type: 'circleResize' };
+          return;
+        }
+      }
+      state.circle = { x: m.x, y: m.y, r: 0 };
+      gesture = { type: 'circleResize' };
+      refresh();
+      return;
+    }
+
+    // ---------------- 多边形：点一下加一个点，点与点自己连成区域 ----------------
+    var idx = nearestVertex(sp);
+    if (idx !== null) {
+      state.dragIndex = idx;
+      gesture = { type: 'vert' };
+      startPress(idx, sp);          // 按住不动 0.48s = 删掉这个点
+      return;
+    }
+
+    var midAt = hitEdgeMid(sp);
+    if (midAt !== null) {
+      // 点边上的小圈 = 在这条边上插一个点，并直接进入拖动状态，可以顺势摆到位
+      pushUndoVertices();
+      state.vertices.splice(midAt, 0, m);
+      state.dragIndex = midAt;
+      gesture = { type: 'vert' };
+      afterVertexChange();
+      toast('已在这条边上插入 1 个点');
+      return;
+    }
+
+    // 落在空白处：轻点 = 新增一个点；拖 = 整块区域平移
+    gesture = { type: 'press', start: m, startSp: sp };
+  }
+
+  function beginPinch() {
+    var ids = idsOf();
+    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    gesture = {
+      type: 'pinch',
+      d0: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+      z0: cam.zoom,
+      wmid: screenToWorld(mid)
+    };
+    state.dragIndex = null;
+    state.rectDraft = null;
+    clearPress();
+    ivx = ivy = 0;
+  }
+
+  function updatePinch() {
+    var ids = idsOf();
+    if (ids.length < 2) return;
+    var a = ptrs[ids[0]], b = ptrs[ids[1]];
+    var d = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
+    var mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+
+    var nz = Math.min(ZMAX, Math.max(ZMIN, gesture.z0 + Math.log(d / gesture.d0) / Math.LN2));
+    cam.zoom = nz;
+    syncScale();
+    var s = scaleFor(nz);
+    setCamWorld(
+      gesture.wmid.x - (mid.x - W / 2) / s,
+      gesture.wmid.y - (mid.y - H / 2) / s
+    );
+    render();
+  }
+
+  function screenToWorld(sp) {
+    var c = camWorld(), s = scaleFor(cam.zoom);
+    return { x: c.x + (sp.x - W / 2) / s, y: c.y + (sp.y - H / 2) / s };
+  }
+
+  function render() { syncScale(); updateReadout(); draw(); }
+
+  cv.addEventListener('pointerdown', function (e) {
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    var sp = localPoint(e);
+    ptrs[e.pointerId] = sp;
+    ptrCount = idsOf().length;
+    if (ptrCount === 1) onSingleDown(e);
+    else if (ptrCount === 2) beginPinch();
+  });
+
+  cv.addEventListener('pointermove', function (e) {
+    var sp = localPoint(e);
+    if (!(e.pointerId in ptrs)) {
+      // 未按下：桌面端悬停显示光标处坐标
+      if (e.pointerType === 'mouse') {
+        var mm = screenToM(sp);
+        rd('rdPlane').innerHTML = '光标 <b>(' + mm.x.toFixed(1) + ', ' + mm.y.toFixed(1) + ') m</b>' +
+          ' · z' + cam.zoom.toFixed(1) + ' · ' + mpp.toFixed(2) + ' m/px';
+      }
+      return;
+    }
+    ptrs[e.pointerId] = sp;
+    ptrCount = idsOf().length;
+
+    if (ptrCount >= 2) { updatePinch(); return; }
+
+    switch (gesture.type) {
+      case 'pan': {
+        var dx = sp.x - gesture.last.x, dy = sp.y - gesture.last.y;
+        gesture.last = sp;
+        panByPixels(dx, dy);
+        ivx = dx * 12; ivy = dy * 12;      // 粗略估计速度，抬手后做惯性
+        render();
+        break;
+      }
+      case 'press': {
+        // 移开超过阈值 → 这动作是「拖动」，不是「点击」，改成整体平移区域
+        if (Math.hypot(sp.x - gesture.startSp.x, sp.y - gesture.startSp.y) > 7) {
+          pushUndoVertices();
+          gesture = {
+            type: 'shapeMove',
+            start: gesture.start,
+            orig: state.vertices.map(clonePt)
+          };
+        }
+        break;
+      }
+      case 'shapeMove': {
+        var sm = screenToM(sp);
+        var sdx = sm.x - gesture.start.x, sdy = sm.y - gesture.start.y;
+        for (var k = 0; k < state.vertices.length; k++) {
+          state.vertices[k] = { x: gesture.orig[k].x + sdx, y: gesture.orig[k].y + sdy };
+        }
+        refresh();
+        break;
+      }
+      case 'vert':
+        markPressMoved(sp);
+        if (state.dragIndex !== null && state.vertices[state.dragIndex]) {
+          state.vertices[state.dragIndex] = screenToM(sp);
+          refresh();
+        }
+        break;
+      case 'rectNew': {
+        var rm = screenToM(sp);
+        state.rectDraft.x1 = rm.x;           // 起点固定，另一个角跟手
+        state.rectDraft.y1 = rm.y;
+        refresh();
+        break;
+      }
+      case 'rectCorner':
+        dragCorner(gesture.corner, screenToM(sp));
+        refresh();
+        break;
+      case 'rectMove': {
+        var mm = screenToM(sp);
+        var ddx = mm.x - gesture.start.x, ddy = mm.y - gesture.start.y;
+        state.rect = {
+          x0: gesture.orig.x0 + ddx, y0: gesture.orig.y0 + ddy,
+          x1: gesture.orig.x1 + ddx, y1: gesture.orig.y1 + ddy
+        };
+        refresh();
+        break;
+      }
+      case 'circleResize': {
+        var crm = screenToM(sp);
+        state.circle.r = Math.max(0, dist(state.circle, crm));
+        refresh();
+        break;
+      }
+      case 'circleMove': {
+        var cmm = screenToM(sp);
+        state.circle.x = gesture.orig.x + (cmm.x - gesture.start.x);
+        state.circle.y = gesture.orig.y + (cmm.y - gesture.start.y);
+        refresh();
+        break;
+      }
+      default: break;
+    }
+  });
+
+  function endPointer(e) {
+    delete ptrs[e.pointerId];
+    ptrCount = idsOf().length;
+    if (ptrCount === 0) {
+      var g = gesture;
+      if (g.type === 'pan') {
+        if (Math.abs(ivx) < 30) { ivx = 0; }
+        if (Math.abs(ivy) < 30) { ivy = 0; }
+        reviveTiles();     // 拖动过就再给失败瓦片一次机会，不用刷新页面
+      } else {
+        ivx = ivy = 0;
+        if (g.type === 'rectNew') finishRect();
+        else if (g.type === 'press') addVertexAt(g.start);   // 轻点空白 = 加一个点
+        else if (g.type === 'vert') afterVertexChange();     // 挪完顶点重算面积/自相交
+      }
+      clearPress();
+      state.dragIndex = null;
+      gesture = { type: '' };
+    } else if (ptrCount === 1) {
+      var ids = idsOf();
+      gesture = { type: 'pan', last: ptrs[ids[0]] };
+      ivx = ivy = 0;
+    }
+  }
+  cv.addEventListener('pointerup', endPointer);
+  cv.addEventListener('pointercancel', endPointer);
+
+  cv.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    zoomAt(localPoint(e), cam.zoom - e.deltaY * 0.0025);
+    render();
+  }, { passive: false });
+
+  cv.addEventListener('dblclick', function (e) {
+    var sp = localPoint(e);
+    // 桌面上双击顶点 = 删除该点（移动端用长按）
+    if (state.tool === 'poly') {
+      var vi = nearestVertex(sp);
+      if (vi !== null) { deleteVertex(vi); return; }
+      return;                              // 编辑多边形时不误触缩放
+    }
+    zoomAt(sp, Math.round(cam.zoom) + 1);
+    render();
+  });
+
+  // ============================================================
+  // 11. 相机动画 / 定位
+  // ============================================================
+  var camAnim = null;
+  function flyTo(lon, lat, zoom, dur) {
+    camAnim = {
+      t0: performance.now(),
+      dur: dur == null ? 650 : dur,
+      from: { lon: cam.lon, lat: cam.lat, zoom: cam.zoom },
+      to: { lon: lon, lat: lat, zoom: zoom == null ? cam.zoom : zoom }
+    };
+  }
+
+  function setMyPos(lon, lat, acc, heading, src) {
+    myPos = { lon: lon, lat: lat, acc: acc || 0, heading: heading, src: src || 'rtk', ts: Date.now() };
+    if (CONFIG.follow && !camAnim) { cam.lon = lon; cam.lat = lat; syncScale(); }
+    render();
+  }
+
+  var geoWatchId = null;
+  function requestPosition() {
+    // 真机：优先让原生侧给（RTK 的 WGS84 经纬度）
+    if (Bridge.post('getPosition', { continuous: true })) return;
+
+    if (geoWatchId !== null) return;
+    if (!navigator.geolocation) { geoFail('本机浏览器不支持定位'); return; }
+
+    geoWatchId = navigator.geolocation.watchPosition(
+      function (p) {
+        stopDemoWalker();
+        setMyPos(p.coords.longitude, p.coords.latitude,
+          p.coords.accuracy, p.coords.heading, 'gps');
+      },
+      function (err) {
+        geoWatchId = null;
+        geoFail(err && err.code === 1
+          ? '定位权限被拒绝'
+          : '浏览器定位不可用（境内取不到定位服务）');
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 }
+    );
+  }
+
+  function geoFail(why) {
+    toast(why + '\n已切到演示位置（灰色虚线点，非真实定位）\n真机由原生侧传入 RTK 坐标');
+    startDemoWalker();
+  }
+
+  // 浏览器定位拿不到时的演示走位，用来验证「定位 + 跟随」的交互
+  function startDemoWalker() {
+    if (demoWalker) return;
+    var o = lonLatToLocal(CONFIG.origin.lon, CONFIG.origin.lat);
+    demoWalker = { a: 0, t: 0, base: o };
+  }
+  function stopDemoWalker() { demoWalker = null; }
+
+  function stepWalker(dt) {
+    if (!demoWalker) return;
+    demoWalker.t += dt;
+    demoWalker.a += dt * 0.25;                       // 角速度
+    var rr = 38;                                     // 米
+    var mx = demoWalker.base.x + Math.cos(demoWalker.a) * rr;
+    var my = demoWalker.base.y + Math.sin(demoWalker.a) * rr;
+    var ll = localToLonLat(mx, my);
+    myPos = {
+      lon: ll.lon, lat: ll.lat,
+      acc: 8, heading: (demoWalker.a * 180 / Math.PI + 90) % 360,
+      src: 'demo', ts: Date.now()
+    };
+    if (CONFIG.follow && !camAnim) { cam.lon = ll.lon; cam.lat = ll.lat; syncScale(); }
+  }
+
+  function doLocate() {
+    CONFIG.follow = true;
+    if (myPos) {
+      flyTo(myPos.lon, myPos.lat, Math.max(cam.zoom, 18.5));
+      toast('已定位到当前位置 · 地图开始跟随');
+    } else {
+      toast('正在获取定位…');
+    }
+    requestPosition();
+    refresh();
+  }
+
+  // ============================================================
+  // 12. 按钮
+  // ============================================================
+  function syncSeg() {
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.tool === state.tool);
+    });
+  }
+
+  // 切换工具。
+  // 两种圈地方式互斥：切过去就把另一种收起来（留一层备份，撤销能找回），
+  // 否则会出现「屏幕上两块形状，下发的到底是哪块」说不清的情况。
+  function setTool(t) {
+    if (t === state.tool) { syncSeg(); return; }
+    // 换工具 = 这块画完了。有效的草稿先自动收进区域列表，别切一下工具就丢。
+    var saved = null;
+    if (draftValid()) {
+      var before = state.areas.length;
+      var a = commitDraft(true);
+      if (a && state.areas.length > before) saved = a.name;
+    } else {
+      if (state.editingId) state.editingId = null;   // 改坏了就放弃这次改动
+      clearDraft();
+    }
+    state.tool = t;
+    syncSeg();
+    refresh();
+    if (saved) toast('「' + saved + '」已收进区域列表\n点上面的标签可以继续改它');
+  }
+
+  document.querySelectorAll('.seg button').forEach(function (btn) {
+    btn.addEventListener('click', function () { setTool(btn.dataset.tool); });
+  });
+
+  document.getElementById('btnLocate').addEventListener('click', function () {
+    if (CONFIG.follow && myPos) {
+      CONFIG.follow = false;
+      toast('已关闭跟随');
+      refresh();
+      return;
+    }
+    doLocate();
+  });
+
+  document.getElementById('btnZoomIn').addEventListener('click', function () {
+    zoomAt({ x: W / 2, y: H / 2 }, Math.round(cam.zoom) + 1);
+    render();
+  });
+  document.getElementById('btnZoomOut').addEventListener('click', function () {
+    zoomAt({ x: W / 2, y: H / 2 }, Math.round(cam.zoom) - 1);
+    render();
+  });
+
+  document.getElementById('btnBase').addEventListener('click', function () {
+    CONFIG.showBasemap = !CONFIG.showBasemap;
+    refresh();
+  });
+
+  document.getElementById('btnCalib').addEventListener('click', function () {
+    state.mode = state.mode === 'zone' ? 'boundary' : 'zone';
+    toast(state.mode === 'boundary'
+      ? '场地标定模式：下发的区域会作为场地边界'
+      : '手动圈地模式：下发的区域会作为重点清扫区');
+    refresh();
+  });
+
+  document.getElementById('btnOrigin').addEventListener('click', function () {
+    // 米制坐标原点 = 当前地图中心（正式流程里就是标定记录的第一个点）
+    var old = { lon: CONFIG.origin.lon, lat: CONFIG.origin.lat };
+    var d = lonLatToLocal(cam.lon, cam.lat);
+
+    CONFIG.origin.lon = cam.lon;
+    CONFIG.origin.lat = cam.lat;
+
+    // 已有几何整体平移，视觉上不动
+    function shift(list) {
+      for (var i = 0; i < list.length; i++) { list[i].x -= d.x; list[i].y -= d.y; }
+    }
+    shift(state.vertices);
+    if (state.rect) {
+      state.rect = {
+        x0: state.rect.x0 - d.x, y0: state.rect.y0 - d.y,
+        x1: state.rect.x1 - d.x, y1: state.rect.y1 - d.y
+      };
+    }
+    if (state.circle) { state.circle.x -= d.x; state.circle.y -= d.y; }
+    for (var ai = 0; ai < state.areas.length; ai++) {
+      var ar = state.areas[ai];
+      if (ar.rect) {
+        ar.rect.x0 -= d.x; ar.rect.y0 -= d.y; ar.rect.x1 -= d.x; ar.rect.y1 -= d.y;
+      }
+      if (ar.center) { ar.center.x -= d.x; ar.center.y -= d.y; }
+      shift(ar.points);
+    }
+    shift(state.path);
+    shift(state.trail);
+    state.robot.x -= d.x; state.robot.y -= d.y;
+
+    Bridge.post('setOrigin', { lon: CONFIG.origin.lon, lat: CONFIG.origin.lat, prev: old });
+    refresh();
+    toast('基准点已设为地图中心\n新原点 ' + cam.lat.toFixed(6) + ', ' + cam.lon.toFixed(6) +
+      '\n原点上所有历史区域原点必须一致，否则会整体偏移');
+  });
+
+  function restoreRect() {
+    if (!state.undoRect) return false;
+    state.rect = cloneRect(state.undoRect);
+    state.undoRect = null;
+    state.undoVertices = null;
+    state.tool = 'rect';
+    syncSeg();
+    refresh();
+    toast('已恢复上一个矩形');
+    return true;
+  }
+  function restorePoly() {
+    if (!state.undoVertices || !state.undoVertices.length) return false;
+    state.vertices = state.undoVertices.map(clonePt);
+    state.undoVertices = null;
+    state.undoRect = null;
+    state.tool = 'poly';
+    syncSeg();
+    afterVertexChange();
+    toast('已恢复上一个多边形');
+    return true;
+  }
+
+  function restoreCircle() {
+    if (!state.undoCircle) return false;
+    state.circle = cloneCircle(state.undoCircle);
+    state.undoCircle = null;
+    state.tool = 'circle';
+    syncSeg();
+    refresh();
+    toast('已恢复上一个圆形');
+    return true;
+  }
+
+  function undo() {
+    // 1) 草稿还在 → 先撤销草稿上的这一步
+    if (state.vertices.length) {
+      state.vertices.pop();
+      afterVertexChange();
+      return;
+    }
+    if (state.rect) {
+      state.undoRect = cloneRect(state.rect);
+      state.rect = null;
+      refresh();
+      toast('已清除矩形 · 再点「撤销」可恢复');
+      return;
+    }
+    if (state.circle) {
+      state.undoCircle = cloneCircle(state.circle);
+      state.circle = null;
+      refresh();
+      toast('已清除圆形 · 再点「撤销」可恢复');
+      return;
+    }
+    // 2) 刚删掉的区域 → 放回列表
+    if (state.undoArea) {
+      var a = state.undoArea;
+      state.undoArea = null;
+      state.areas.push(a);
+      refresh();
+      toast('已恢复「' + a.name + '」');
+      return;
+    }
+    // 3) 切工具时被收起的那一块 → 取回草稿继续编辑
+    if (restoreRect()) return;
+    if (restoreCircle()) return;
+    if (restorePoly()) return;
+    refresh();
+  }
+
+  document.getElementById('btnUndo').addEventListener('click', undo);
+
+  // 新建区域：把手上这块收进区域列表，然后接着圈下一块。
+  // 正在改一块已有区域时，这个按钮变成「保存修改」。
+  document.getElementById('btnNewArea').addEventListener('click', function () {
+    if (!draftValid()) {
+      toast(state.editingId
+        ? '这块被改得没面积了 · 用「撤销」放弃改动'
+        : '先圈出一块区域（矩形 / 圆形 / 多边形都行）');
+      return;
+    }
+    commitDraft(false);
+    refresh();
+  });
+
+  document.getElementById('btnClear').addEventListener('click', function () {
+    clearDraft();
+    state.areas = [];
+    state.editingId = null;
+    state.undoArea = null;
+    state.undoRect = null;
+    state.undoCircle = null;
+    state.undoVertices = null;
+    state.seq = 0;
+    state.sent = false;
+    state.path = [];
+    state.planLength = 0;
+    state.trail = [];
+    state.mileage = 0;
+    state.covered = 0;
+    state.robot.mileage = 0;
+    state.running = false;
+    refresh();
+    toast('已清空全部区域与作业记录');
+  });
+
+  document.getElementById('btnSend').addEventListener('click', function () {
+    // 手上还没收起来的那块也算一块：先收进列表，
+    // 这样「下发的就是列表里那几块」这条规则永远成立，不会有隐藏的第四块。
+    if (draftValid()) commitDraft(true);
+    var list = allAreas();
+    if (!list.length) { toast('先圈出一块区域再下发'); return; }
+
+    var selfX = false;
+    var areas = [];
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      // 兜底：清掉挨得太近的重复点。点选模式正常不会触发，留给「导入轨迹」这类入口。
+      var pts = dedupe(a.points, 0.05);
+      // 抽稀只对多边形做——矩形和圆是程序生成的规整点，抽了反而让面积对不上：
+      // 25 m 半径的圆按 0.5 m 容差抽一次，面积会掉几个 m²，跟列表上显示的数字打架。
+      if (a.kind === 'poly') pts = simplifyToLimit(pts, MAX_AREA_POINTS);
+      if (pts.length < 3) continue;
+      if (a.kind === 'poly' && selfIntersects(pts)) selfX = true;
+      var o = {
+        id: a.id,
+        name: a.name,
+        shape: a.kind,                     // 'rect' | 'circle' | 'poly'
+        points: pts.map(function (p) { return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) }; }),
+        areaM2: +polygonArea(pts).toFixed(1)
+      };
+      if (a.kind === 'rect' && a.sizeM) o.sizeM = a.sizeM;
+      if (a.kind === 'circle') { o.center = a.center; o.radiusM = a.radiusM; }
+      areas.push(o);
+    }
+    if (!areas.length) { toast('圈出来的区域太小，没法下发'); return; }
+
+    var totalA = 0;
+    for (var j = 0; j < areas.length; j++) totalA += areas[j].areaM2;
+    state.selfX = selfX;
+
+    var cmd = {
+      type: state.mode === 'zone' ? 'clean_zone' : 'boundary',
+      // 米制坐标的原点：原生侧必须用同一个原点，否则两端换算会整体偏移
+      origin: { lon: +CONFIG.origin.lon.toFixed(7), lat: +CONFIG.origin.lat.toFixed(7) },
+      areas: areas,
+      areaCount: areas.length,
+      totalAreaM2: +totalA.toFixed(1)
+    };
+
+    // 每块区域各自规划再串起来，只为让操作员看到大概要跑多远
+    state.path = buildMultiPath(areas);
+    state.planLength = pathLength(state.path);
+    state.pathIndex = 0;
+    state.segProgress = 0;
+    state.trail = [];
+    state.mileage = 0;
+    state.covered = 0;
+    state.robot.mileage = 0;
+    state.robot.battery = 82;
+
+    // 先发，再看原生是否受理，最后才决定要不要标「已下发」。
+    // 以前是先乐观置位 sent=true 再发，于是没连机器人时界面也显示已下发、
+    // 边框变实线，操作员会以为已经交给机器人了——而实际上原生那边直接扔了。
+    var usedNative = Bridge.post('sendRegion', cmd);
+    if (Bridge.lastError) {
+      state.sent = false;
+      refresh();
+      toast('下发失败：' + Bridge.lastError +
+        '\n区域已保留，处理完再点一次「下发」即可');
+      return;
+    }
+    state.sent = true;
+    for (var k = 0; k < state.areas.length; k++) state.areas[k].sent = true;
+
+    var bytes = jsonBytes(cmd);
+    // 设置页「关于」要显示上一次下发，顺手留个摘要（含完整报文，方便现场比对）
+    lastSend = {
+      areas: areas.length, bytes: bytes, m2: +totalA.toFixed(1),
+      at: Date.now(), json: cmd
+    };
+    refresh();
+    toast((state.selfX ? '注意：有区域自相交，机器人行驶顺序可能不对\n' : '') +
+      (usedNative ? '已下发 ' : '已生成(浏览器模式) ') +
+      areas.length + ' 块区域 / ' + totalA.toFixed(0) + ' m² · 报文 ' + bytes + ' B' +
+      (bytes > 240 ? '（超单个 BLE 包，原生侧要分片）' : '') + '\n' +
+      (state.path.length > 1
+        ? '规划路径 ' + state.planLength.toFixed(0) + ' m（已按半割幅内缩）'
+        : '注意：区域比机宽（' + MOWER_WIDTH + ' m）还窄，规划不出路径'));
+  });
+
+  document.getElementById('btnRun').addEventListener('click', function () {
+    if (state.running) {
+      state.running = false;
+      Bridge.post('pauseTask', {});
+      refresh();
+      toast('已暂停');
+      return;
+    }
+    if (!state.sent) { toast('请先圈定区域并点「下发区域」'); return; }
+
+    if (state.path.length < 2) {
+      state.path = buildMultiPath(allAreas());
+      state.planLength = pathLength(state.path);
+    }
+    if (state.path.length < 2) { toast('区域太小，规划不出路径'); return; }
+
+    // 机器人先行驶到路径起点，这一段也算里程
+    state.path = [{ x: state.robot.x, y: state.robot.y }].concat(state.path);
+    state.pathIndex = 0;
+    state.segProgress = 0;
+    state.trail = [{ x: state.robot.x, y: state.robot.y }];
+    state.mileage = 0;
+    state.covered = 0;
+    state.robot.mileage = 0;
+    state.running = true;
+
+    Bridge.post('startTask', {
+      lane: LANE,
+      deckWidth: MOWER_WIDTH,
+      inset: INSET,
+      plannedLength: +state.planLength.toFixed(1)
+    });
+    refresh();
+    toast('开始作业 · 机器人只走蓝色虚线范围内的路径');
+  });
+
+  // ============================================================
+  // 13. 机器人沿路径行走
+  // ============================================================
+  var lastSample = null;
+  function stepRobot(dt) {
+    var speed = 12;
+    var remain = speed * dt;
+    var path = state.path;
+    var moved = 0;
+
+    while (remain > 0 && state.pathIndex < path.length - 1) {
+      var a = path[state.pathIndex], b = path[state.pathIndex + 1];
+      var segLen = dist(a, b);
+      if (segLen < 1e-6) { state.pathIndex++; state.segProgress = 0; continue; }
+      var left = segLen - state.segProgress;
+      if (remain < left) {
+        state.segProgress += remain;
+        moved += remain;
+        remain = 0;
+      } else {
+        remain -= left;
+        moved += left;
+        state.pathIndex++;
+        state.segProgress = 0;
+      }
+    }
+
+    if (state.pathIndex >= path.length - 1) {
+      state.running = false;
+      Bridge.post('taskDone', { mileage: +state.mileage.toFixed(1) });
+      toast('作业完成 · 里程 ' + state.mileage.toFixed(1) + ' m');
+      refresh();
+      return;
+    }
+
+    var A = path[state.pathIndex], B = path[state.pathIndex + 1];
+    var seg = dist(A, B);
+    var t = seg > 0 ? state.segProgress / seg : 0;
+    state.robot.x = A.x + (B.x - A.x) * t;
+    state.robot.y = A.y + (B.y - A.y) * t;
+    // 屏幕 y 轴向下，场地 y 轴向上，所以 heading 取负
+    state.robot.heading = Math.atan2(-(B.y - A.y), B.x - A.x);
+    state.robot.battery = Math.max(5, state.robot.battery - moved * 0.0015);
+
+    state.mileage += moved;
+    state.covered = state.mileage * MOWER_WIDTH;
+
+    if (!lastSample || dist(lastSample, state.robot) > 0.8) {
+      state.trail.push({ x: state.robot.x, y: state.robot.y });
+      lastSample = { x: state.robot.x, y: state.robot.y };
+    }
+  }
+
+  // ============================================================
+  // 14. 主循环
+  // ============================================================
+  var prev = performance.now();
+  function loop(now) {
+    var dt = Math.min((now - prev) / 1000, 0.05);
+    prev = now;
+    var need = false;
+
+    if (camAnim) {
+      var t = Math.min(1, (now - camAnim.t0) / camAnim.dur);
+      var e = 1 - Math.pow(1 - t, 3);
+      cam.lon = camAnim.from.lon + (camAnim.to.lon - camAnim.from.lon) * e;
+      cam.lat = camAnim.from.lat + (camAnim.to.lat - camAnim.from.lat) * e;
+      cam.zoom = camAnim.from.zoom + (camAnim.to.zoom - camAnim.from.zoom) * e;
+      syncScale();
+      if (t >= 1) camAnim = null;
+      need = true;
+    }
+
+    if (!gesture.type && (Math.abs(ivx) > 20 || Math.abs(ivy) > 20)) {
+      var f = Math.exp(-dt * 4.5);
+      panByPixels(ivx * dt, ivy * dt);
+      ivx *= f; ivy *= f;
+      need = true;
+    }
+
+    if (demoWalker) { stepWalker(dt); need = true; }
+
+    if (state.running) {
+      stepRobot(dt);
+      document.getElementById('mCovered').textContent = state.covered.toFixed(1);
+      document.getElementById('battery').textContent = Math.round(state.robot.battery) + '%';
+      need = true;
+    }
+
+    // 瓦片还在路上（含排队）就保持重绘：祖先兜底画的糊图会被新瓦片逐块替换。
+    // 不加这条的话，静止时 loop 不重绘，放大后画面会一直停在空白上。
+    if (tileActive > 0 || tileQueue.length) need = true;
+
+    if (need) { updateReadout(); draw(); }
+    requestAnimationFrame(loop);
+  }
+
+  // ============================================================
+  // 16. 页面路由：连接页 → 规划页 →（设置页）
+  //
+  //     入场必须是连接页。没连上机器人就让人圈地，最后按下发的时候
+  //     才发现「不知道发给了谁」—— 这是整个流程里最早的失败点，
+  //     所以规划页只能由「连接成功」这条路径进入。
+  // ============================================================
+  var APP_VERSION = '1.1.0';
+  var SCREENS = ['connect', 'plan', 'settings'];
+  var screenNow = 'connect';
+  var settingsFrom = 'plan';        // 设置页从哪来就回哪去
+  var lastSend = null;              // 最近一次下发的摘要，设置页「关于」里看
+
+  function showScreen(name) {
+    if (SCREENS.indexOf(name) < 0) name = 'plan';
+    screenNow = name;
+    for (var i = 0; i < SCREENS.length; i++) {
+      var node = document.getElementById('screen-' + SCREENS[i]);
+      if (!node) continue;
+      if (SCREENS[i] === name) node.classList.add('show');
+      else node.classList.remove('show');
+    }
+    if (name === 'plan') {
+      // 规划页刚从 display:none 里出来，canvas 量到的尺寸是 0，必须重量一次
+      resize();
+      requestAnimationFrame(function () { resize(); refresh(); });
+    } else if (name === 'settings') {
+      renderSettings();
+    } else {
+      renderConnect();
+    }
+    refresh();
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function inputVal(id) {
+    var e = document.getElementById(id);
+    return e && typeof e.value === 'string' ? e.value.trim() : '';
+  }
+
+  // ============================================================
+  // 17. 连接页状态机
+  //     idle → scanning → connecting → ready
+  //                 ↘ error（可重试）
+  //     原生回推的 onConnection 和页面自己的按钮都喂给同一个状态机，
+  //     两条来源不会各说各话。
+  // ============================================================
+  var conn = {
+    phase: 'idle',
+    detail: '',
+    devices: [],
+    device: '',        // 已连上的设备
+    step: {},          // 连接进度 {link|svc|ready} = 'run' | 'done'
+    demoForce: false,  // App 里也想直接演示时置位
+    demo: false
+  };
+
+  var scanTimer = null, connectTimer = null;
+
+  var RING_CLASS = { idle: '', scanning: 'scan', connecting: 'scan', ready: 'on', error: 'err' };
+
+  var ICON_BT =
+    '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M7 7.5l9.5 9.5-4.8 3.7V3.3l4.8 3.7L7 16.5"/></svg>';
+  var ICON_OK =
+    '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+    ' stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M20 6.5L9.5 17 4 11.5"/></svg>';
+  var ICON_WARN =
+    '<svg width="37" height="37" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+    ' stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="12" r="9"/><path d="M12 7.6v5.2M12 16.4v.1"/></svg>';
+
+  function hasNative() { return Bridge.hasNative(); }
+  function demoMode() { return !hasNative() || conn.demoForce === true; }
+
+  // 4 格信号条。RSSI 阈值按 BLE 常见区间取，不是精确物理量，够用就行。
+  function sigBars(rssi) {
+    var lv = 1;
+    if (typeof rssi === 'number') {
+      lv = rssi >= -60 ? 4 : rssi >= -72 ? 3 : rssi >= -84 ? 2 : 1;
+    }
+    var hs = [6, 9, 12, 15], s = '<span class="sig">';
+    for (var i = 0; i < 4; i++) {
+      s += '<i class="' + (i < lv ? 'on' : '') + '" style="height:' + hs[i] + 'px"></i>';
+    }
+    return s + '</span>';
+  }
+
+  function renderConnect() {
+    var ring = document.getElementById('cnRing');
+    var st = document.getElementById('cnState');
+    var dt = document.getElementById('cnDetail');
+    var steps = document.getElementById('cnSteps');
+    var listBox = document.getElementById('cnListBox');
+    var list = document.getElementById('cnList');
+    var count = document.getElementById('cnCount');
+    var btnScan = document.getElementById('btnScan');
+    var btnDemo = document.getElementById('btnDemo');
+    var note = document.getElementById('cnNote');
+    var i;
+
+    if (!ring || !st) return;
+
+    conn.demo = demoMode();
+    ring.className = 'cn-ring' + (RING_CLASS[conn.phase] ? ' ' + RING_CLASS[conn.phase] : '');
+    ring.innerHTML = conn.phase === 'ready' ? ICON_OK
+      : conn.phase === 'error' ? ICON_WARN : ICON_BT;
+
+    if (conn.phase === 'idle') {
+      st.textContent = '请先连接机器人';
+      dt.textContent = '打开机器人电源，确认指示灯闪烁后再搜索';
+    } else if (conn.phase === 'scanning') {
+      st.textContent = '正在搜索机器人';
+      dt.textContent = conn.detail || '请让手机靠近机器人（3 米内）';
+    } else if (conn.phase === 'connecting') {
+      st.textContent = '正在连接';
+      dt.textContent = conn.detail || '正在建立蓝牙连接…';
+    } else if (conn.phase === 'ready') {
+      st.textContent = '连接成功';
+      dt.textContent = conn.detail || '机器人已就绪';
+    } else {
+      st.textContent = '连接失败';
+      dt.textContent = conn.detail || '请重试';
+    }
+
+    // 连接进度三步
+    if (steps) {
+      if (conn.phase === 'connecting' || conn.phase === 'ready') {
+        steps.classList.add('show');
+        var items = steps.querySelectorAll ? steps.querySelectorAll('li') : [];
+        for (i = 0; i < items.length; i++) {
+          items[i].className = conn.step[items[i].getAttribute('data-step')] || '';
+        }
+      } else {
+        steps.classList.remove('show');
+      }
+    }
+
+    // 设备列表：只在搜索中且有结果时出现
+    if (conn.phase === 'scanning' && conn.devices.length) {
+      var h = '';
+      for (i = 0; i < conn.devices.length; i++) {
+        var d = conn.devices[i];
+        h += '<div class="cn-dev" data-id="' + esc(d.id) + '">' +
+          '<div style="min-width:0">' +
+          '<div class="nm">' + esc(d.name || '未命名设备') + '</div>' +
+          '<div class="mac">' + esc(d.id) +
+          (typeof d.rssi === 'number' ? ' · ' + d.rssi + ' dBm' : '') + '</div></div>' +
+          sigBars(d.rssi) + '<span class="go">连接</span></div>';
+      }
+      if (list) list.innerHTML = h;
+      if (count) count.textContent = '（' + conn.devices.length + '）';
+      if (listBox) listBox.style.display = '';
+    } else if (listBox) {
+      listBox.style.display = 'none';
+      if (list) list.innerHTML = '';
+    }
+
+    // 主按钮：同一个位置承担「搜索 / 停止 / 进入规划」三种语义
+    var nativeOk = hasNative();
+    if (btnScan) {
+      btnScan.textContent =
+        conn.phase === 'scanning' ? (conn.demo ? '停止演示' : '停止搜索') :
+        conn.phase === 'connecting' ? '正在连接…' :
+        conn.phase === 'ready' ? '已连接，进入规划' :
+        conn.phase === 'error' ? '重新搜索' :
+        (conn.demo ? (nativeOk ? '用模拟设备走一遍' : '演示模式（浏览器预览）') : '搜索机器人');
+      btnScan.disabled = (conn.phase === 'connecting');
+    }
+
+    // 演示模式的退路。
+    // 只要原生蓝牙可用，就必须留一个能回到真实扫描的按钮——之前演示时把它
+    // 直接 display:none 了，用户点进演示之后**再也回不去连真机器人**，
+    // 只能杀掉 App 重进。浏览器里没原生，演示是唯一路径，那时才该隐藏。
+    if (btnDemo) {
+      if (!nativeOk) {
+        btnDemo.style.display = 'none';
+      } else {
+        btnDemo.style.display = '';
+        btnDemo.textContent = conn.demo ? '退出演示，搜索真机器人' : '演示模式（无机器人时体验）';
+      }
+    }
+
+    // 文案要说实话：App 里（有原生）进演示是**用户自己选的**，
+    // 不能说成「当前在浏览器里运行」——这句话在 App 里是错的，会让人以为装错了包。
+    if (note) {
+      note.textContent = !nativeOk
+        ? '当前在浏览器里运行：蓝牙必须由原生层提供，这里用演示数据把流程走一遍。装进 App 才会真正扫描机器人。'
+        : conn.demo
+          ? '演示模式：用模拟设备把「搜索 → 连接」走一遍，不会真的连机器人。要连真机器人，点下面的「退出演示，搜索真机器人」。'
+          : '搜不到机器人？确认它已开机、手机蓝牙已打开、并在 3 米内。BLE 标识可到「设置 → 机器人 BLE 标识」里改。';
+    }
+  }
+
+  function setStep(k, v) { conn.step[k] = v; renderConnect(); }
+
+  function startScan() {
+    if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+    conn.devices = [];
+    conn.step = {};
+    conn.phase = 'scanning';
+    conn.detail = '';
+    renderConnect();
+
+    if (demoMode()) {
+      // 浏览器 / 主动演示：造两台假设备，把「搜索 → 选择 → 连接」演完
+      scanTimer = setTimeout(function () {
+        scanTimer = null;
+        if (conn.phase !== 'scanning') return;
+        conn.devices = [
+          { id: 'DEMO:2C:4D:54:1A:9F:08', name: 'GolfBot-01', rssi: -57 },
+          { id: 'DEMO:2C:4D:54:1A:9F:22', name: 'GolfBot-02', rssi: -81 }
+        ];
+        conn.detail = '找到 2 台设备，点一下即可连接';
+        renderConnect();
+      }, 900);
+      return;
+    }
+
+    if (!Bridge.post('scan', {})) {
+      conn.phase = 'error';
+      conn.detail = Bridge.lastError || '无法开始扫描';
+      renderConnect();
+    }
+  }
+
+  function stopScan() {
+    if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+    if (hasNative()) Bridge.post('stopScan', {});
+    if (conn.phase === 'scanning' && !conn.devices.length) {
+      conn.phase = 'idle';
+      conn.detail = '已停止搜索';
+    }
+    renderConnect();
+  }
+
+  function connectTo(deviceId) {
+    var id = deviceId || '';
+    conn.phase = 'connecting';
+    conn.device = id;
+    conn.detail = '正在建立蓝牙连接…';
+    conn.step = { link: 'run' };
+    renderConnect();
+
+    if (demoMode() || id.indexOf('DEMO:') === 0) {
+      if (connectTimer) clearTimeout(connectTimer);
+      connectTimer = setTimeout(function () {
+        connectTimer = null;
+        setStep('link', 'done');
+        setStep('svc', 'done');
+        setStep('ready', 'done');
+        onConnected(id);
+      }, 1300);
+      return;
+    }
+
+    if (!Bridge.post('connect', id ? { deviceId: id } : {})) {
+      conn.phase = 'error';
+      conn.detail = Bridge.lastError || '连接指令被原生拒绝';
+      renderConnect();
+    }
+  }
+
+  function onConnected(deviceId) {
+    conn.phase = 'ready';
+    if (deviceId) conn.device = deviceId;
+    conn.detail = conn.device ? ('设备 ' + conn.device) : '机器人已就绪';
+    conn.step = { link: 'done', svc: 'done', ready: 'done' };
+    renderConnect();
+    renderSettings();
+    // 停 0.7 秒再切页：直接跳走用户会怀疑「到底连上没有」
+    setTimeout(function () {
+      if (conn.phase === 'ready' && screenNow === 'connect') {
+        showScreen('plan');
+        toast('机器人已连接，可以开始规划场地了');
+      }
+    }, 700);
+  }
+
+  function disconnectRobot(silent) {
+    if (scanTimer) { clearTimeout(scanTimer); scanTimer = null; }
+    if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+    if (hasNative()) Bridge.post('disconnect', {});
+    conn.phase = 'idle';
+    conn.device = '';
+    conn.detail = '';
+    conn.step = {};
+    conn.devices = [];
+    renderConnect();
+    renderSettings();
+    if (!silent) toast('已断开机器人连接');
+  }
+
+  // 原生 → H5 的连接状态统一从这里进。
+  // 兼容两种原生：新的回 phase，老的只回 connected。
+  function applyConnection(c) {
+    var phase = (c && typeof c.phase === 'string') ? c.phase : '';
+    var ok = !!(c && c.connected);
+    var detail = (c && c.detail) || '';
+    if (!phase) phase = ok ? 'connected' : 'error';
+    if (phase === 'error' && c && c.disconnected === true) phase = 'idle';
+
+    if (phase === 'scanning') {
+      if (conn.phase !== 'scanning') { conn.phase = 'scanning'; conn.devices = []; }
+      if (detail) conn.detail = detail;
+    } else if (phase === 'connecting') {
+      conn.phase = 'connecting';
+      if (detail) conn.detail = detail;
+      if (!conn.step.link) conn.step.link = 'run';
+    } else if (phase === 'connected') {
+      if (conn.phase !== 'ready') onConnected(conn.device);
+      conn.step = { link: 'done', svc: 'done', ready: 'done' };
+      if (detail) conn.detail = detail;
+    } else if (phase === 'idle') {
+      conn.phase = 'idle';
+      conn.detail = detail;
+      conn.device = '';
+      conn.step = {};
+    } else {
+      conn.phase = 'error';
+      conn.detail = detail || '连接失败';
+      // 已经在规划页还掉线 → 必须显式提示，不然操作员会继续下发
+      if (screenNow === 'plan') {
+        toast('与机器人断开\n' + (detail || '请回到连接页重新连接'));
+      }
+    }
+
+    // 状态栏
+    var dot = document.getElementById('linkDot');
+    var txt = document.getElementById('linkText');
+    if (dot && txt) {
+      dot.className = 'dot' + (phase === 'connected' ? ' on' : '');
+      txt.textContent = phase === 'connected'
+        ? ('已连接 · ' + (detail || '机器人'))
+        : (detail || '未连接');
+    }
+
+    renderConnect();
+    renderSettings();
+  }
+
+  function bindConnectEvents() {
+    var btnScan = document.getElementById('btnScan');
+    if (btnScan) btnScan.addEventListener('click', function () {
+      if (conn.phase === 'scanning') { stopScan(); return; }
+      if (conn.phase === 'ready') { showScreen('plan'); return; }
+      startScan();
+    });
+
+    var btnDemo = document.getElementById('btnDemo');
+    if (btnDemo) btnDemo.addEventListener('click', function () {
+      if (conn.demoForce) {
+        // 退出演示，回到真实扫描。没有这一步的话用户进了演示就出不来。
+        conn.demoForce = false;
+        stopScan();
+        conn.devices = [];
+        conn.phase = 'idle';
+        conn.step = {};
+        conn.detail = '';
+        renderConnect();
+        return;
+      }
+      conn.demoForce = true;          // 手里没机器人时也能把流程走一遍
+      startScan();
+    });
+
+    var list = document.getElementById('cnList');
+    if (list) list.addEventListener('click', function (e) {
+      var t = e && e.target;
+      var node = (t && t.closest) ? t.closest('.cn-dev') : null;
+      if (!node) return;
+      connectTo(node.getAttribute('data-id'));
+    });
+
+    var bLink = document.getElementById('btnLink');
+    if (bLink) bLink.addEventListener('click', function () {
+      settingsFrom = 'plan';
+      showScreen('connect');
+    });
+
+    var bSet = document.getElementById('btnSettings');
+    if (bSet) bSet.addEventListener('click', function () {
+      settingsFrom = 'plan';
+      showScreen('settings');
+    });
+  }
+
+  // ============================================================
+  // 18. 设置页
+  // ============================================================
+  function setVal(id, v) {
+    var e = document.getElementById(id);
+    if (e) e.textContent = v == null ? '' : String(v);
+  }
+  function setInput(id, v) {
+    var e = document.getElementById(id);
+    if (e) e.value = v == null ? '' : String(v);
+  }
+  function setSw(id, on) {
+    var e = document.getElementById(id);
+    if (!e) return;
+    if (on) e.classList.add('on'); else e.classList.remove('on');
+  }
+  function setSeg(segId, attr, value) {
+    var box = document.getElementById(segId);
+    if (!box || !box.querySelectorAll) return;
+    var b = box.querySelectorAll('button');
+    for (var i = 0; i < b.length; i++) {
+      var on = b[i].getAttribute('data-' + attr) === value;
+      if (on) b[i].classList.add('active'); else b[i].classList.remove('active');
+    }
+  }
+
+  function persist(msg) {
+    var ok = saveSettings();
+    if (!ok) toast('本机存储不可用，这些设置只在本次运行有效');
+    else if (msg) toast(msg);
+    renderSettings();
+  }
+
+  function renderSettings() {
+    setVal('setVersion', APP_VERSION);
+    setVal('setEnv', hasNative() ? 'App 原生' : '浏览器（演示）');
+    setVal('setConnState',
+      conn.phase === 'ready' ? '已连接' :
+      conn.phase === 'connecting' ? '正在连接' :
+      conn.phase === 'scanning' ? '正在搜索' :
+      conn.phase === 'error' ? ('失败：' + (conn.detail || '未知原因')) : '未连接');
+    setVal('setDevice', conn.device || '--');
+
+    setSeg('segBasemap', 'bm', settings.basemap);
+    setInput('inpTdtKey', settings.tiandituKey);
+    setInput('inpCustomUrl', settings.customTileUrl);
+    setSw('swBasemap', settings.showBasemap);
+    setSw('swGrid', settings.showGrid);
+    setSeg('segQuality', 'q', settings.quality);
+
+    setInput('inpOriginLon', CONFIG.origin.lon.toFixed(6));
+    setInput('inpOriginLat', CONFIG.origin.lat.toFixed(6));
+
+    setInput('inpLane', settings.lane);
+    setInput('inpMowerW', settings.mowerWidth);
+
+    setInput('inpNamePrefix', settings.bleNamePrefix);
+    setInput('inpSvcUuid', settings.bleServiceUuid);
+    setInput('inpWriteUuid', settings.bleWriteUuid);
+    setInput('inpNotifyUuid', settings.bleNotifyUuid);
+
+    var n = 0;
+    for (var k in tileCache) n++;
+    setVal('setTileCount', n + ' 张');
+    setVal('setAreaCount', state.areas.length + ' 块');
+    setVal('setLastSend', lastSend
+      ? (lastSend.areas + ' 块 / ' + lastSend.bytes + ' B') : '还没有下发过');
+
+    setVal('noteQuality',
+      '「高清」按屏幕像素密度选层，卫星图最清楚、也最费流量；「省流」按相机层级取图，' +
+      '放大后偏糊。当前屏幕像素比 ' + (DPR > 0 ? DPR.toFixed(2) : '1') +
+      '，底图最高层级 z' + maxTileZ() + '。');
+
+    setVal('noteEnv', hasNative()
+      ? '运算全在手机本地完成，蓝牙由原生层直连机器人。桥接协议见 BRIDGE.md。'
+      : '当前是浏览器预览：蓝牙和定位都会退化成演示数据，装进 App 后自动切到原生通道。');
+  }
+
+  function bindSwitch(id, key) {
+    var s = document.getElementById(id);
+    if (!s) return;
+    s.addEventListener('click', function () {
+      settings[key] = !settings[key];
+      setSw(id, settings[key]);
+      applySettings();
+      persist();
+      refresh();
+    });
+  }
+
+  // 改原点 = 把米制平面整体平移，已画区域的米制坐标会跟着漂。
+  // 所以这里先把点挂到「旧原点的经纬度」上，改完原点再换算回来，
+  // 结果就是区域在图上纹丝不动、只有 (0,0) 换了地方。
+  function setOrigin(lon, lat, save) {
+    var recs = [], i, j;
+    for (i = 0; i < state.areas.length; i++) {
+      var a = state.areas[i], rec = { pts: [], rect: null, center: null };
+      for (j = 0; j < a.points.length; j++) rec.pts.push(localToLonLat(a.points[j].x, a.points[j].y));
+      if (a.rect) rec.rect = [localToLonLat(a.rect.x0, a.rect.y0), localToLonLat(a.rect.x1, a.rect.y1)];
+      if (a.center) rec.center = localToLonLat(a.center.x, a.center.y);
+      recs.push(rec);
+    }
+
+    clearDraft();                       // 没「新建」的草稿直接丢，没名字没法定性
+    CONFIG.origin.lon = lon;
+    CONFIG.origin.lat = lat;
+
+    for (i = 0; i < state.areas.length && i < recs.length; i++) {
+      var ar = state.areas[i], rr = recs[i], p0, p1;
+      ar.points = [];
+      for (j = 0; j < rr.pts.length; j++) {
+        ar.points.push(lonLatToLocal(rr.pts[j].lon, rr.pts[j].lat));
+      }
+      if (rr.rect) {
+        p0 = lonLatToLocal(rr.rect[0].lon, rr.rect[0].lat);
+        p1 = lonLatToLocal(rr.rect[1].lon, rr.rect[1].lat);
+        ar.rect = { x0: p0.x, y0: p0.y, x1: p1.x, y1: p1.y };
+        ar.sizeM = { w: Math.abs(p1.x - p0.x), h: Math.abs(p1.y - p0.y) };
+      }
+      if (rr.center) ar.center = lonLatToLocal(rr.center.lon, rr.center.lat);
+      ar.areaM2 = +polygonArea(ar.points).toFixed(1);
+    }
+
+    if (save) {
+      settings.origin = { lon: lon, lat: lat };
+      if (!saveSettings()) toast('本机存储不可用，原点只在本次运行有效');
+    }
+    refresh();
+    renderSettings();
+  }
+
+  function originFromHere() {
+    if (myPos && typeof myPos.lon === 'number' && typeof myPos.lat === 'number') {
+      setOrigin(myPos.lon, myPos.lat, true);
+      toast('已把当前位置设为原点');
+      return;
+    }
+    if (hasNative() && Bridge.post('getPosition', {})) {
+      toast('正在获取定位…拿到后再点一次「以当前位置为原点」');
+      return;
+    }
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function (p) {
+        var lon = p.coords.longitude, lat = p.coords.latitude;
+        setMyPos(lon, lat, p.coords.accuracy, null, 'gps');
+        setOrigin(lon, lat, true);
+        toast('已把当前位置设为原点');
+      }, function () {
+        toast('定位失败：请检查系统定位权限');
+      });
+      return;
+    }
+    toast('还没有定位数据，先点地图左上角的「定位」');
+  }
+
+  function bindSettingsEvents() {
+    var back = document.getElementById('btnSetBack');
+    if (back) back.addEventListener('click', function () { showScreen(settingsFrom); });
+
+    var rc = document.getElementById('btnReconnect');
+    if (rc) rc.addEventListener('click', function () {
+      settingsFrom = 'settings';
+      showScreen('connect');
+      startScan();
+    });
+    var dc = document.getElementById('btnDisconnect');
+    if (dc) dc.addEventListener('click', function () { disconnectRobot(); });
+
+    var segBm = document.getElementById('segBasemap');
+    if (segBm) segBm.addEventListener('click', function (e) {
+      var t = e && e.target;
+      var v = (t && t.getAttribute) ? t.getAttribute('data-bm') : null;
+      if (!v || v === settings.basemap) return;
+      settings.basemap = v;
+      applySettings();
+      resetTiles();                     // 换源后旧瓦片全部作废（URL、层级都不同）
+      if (v === 'custom') {
+        // 切到自定义却没填模板的话，底图只会是空白——当场说清楚，别让人对着空地图猜
+        persist(settings.customTileUrl ? '底图已切到自定义源' : '已选自定义源 · 请在下面填瓦片地址');
+      } else if (v === 'tianditu') {
+        persist(settings.tiandituKey ? '底图已切到天地图' : '已选天地图 · 请填 Key');
+      } else {
+        persist('底图已切到 Esri 卫星');
+      }
+      refresh();
+    });
+
+    var keyIn = document.getElementById('inpTdtKey');
+    if (keyIn) keyIn.addEventListener('change', function () {
+      settings.tiandituKey = String(keyIn.value || '').trim();
+      applySettings();
+      resetTiles();
+      persist('天地图 Key 已保存');
+      refresh();
+    });
+
+    var cusIn = document.getElementById('inpCustomUrl');
+    if (cusIn) cusIn.addEventListener('change', function () {
+      var u = String(cusIn.value || '').trim();
+      // 没写占位符的模板永远只会取到同一张图，等于一张图铺满屏幕——拦下来
+      if (u && !/\{z\}/.test(u)) {
+        toast('模板里要有 {z} {x} {y} 占位符，例如 https://…/{z}/{x}/{y}.jpg');
+        renderSettings();
+        return;
+      }
+      settings.customTileUrl = u;
+      applySettings();
+      resetTiles();
+      persist(u ? '自定义瓦片源已保存' : '已清空自定义源');
+      refresh();
+    });
+
+    bindSwitch('swBasemap', 'showBasemap');
+    bindSwitch('swGrid', 'showGrid');
+
+    var segQ = document.getElementById('segQuality');
+    if (segQ) segQ.addEventListener('click', function (e) {
+      var t = e && e.target;
+      var v = (t && t.getAttribute) ? t.getAttribute('data-q') : null;
+      if (!v || v === settings.quality) return;
+      settings.quality = v;
+      applySettings();
+      resetTiles();
+      persist('清晰度：' + ({ sharp: '高清', normal: '标准', lite: '省流' }[v] || v));
+      refresh();
+    });
+
+    function applyOrigin() {
+      var a = parseFloat(inputVal('inpOriginLon'));
+      var b = parseFloat(inputVal('inpOriginLat'));
+      if (!isFinite(a) || !isFinite(b) || a < -180 || a > 180 || b < -90 || b > 90) {
+        toast('经纬度不合法：经度 -180~180，纬度 -90~90');
+        renderSettings();
+        return;
+      }
+      setOrigin(a, b, true);
+      toast('原点已更新（区域位置保持不变）');
+    }
+    var lonIn = document.getElementById('inpOriginLon');
+    if (lonIn) lonIn.addEventListener('change', applyOrigin);
+    var latIn = document.getElementById('inpOriginLat');
+    if (latIn) latIn.addEventListener('change', applyOrigin);
+
+    var here = document.getElementById('btnOriginHere');
+    if (here) here.addEventListener('click', originFromHere);
+    var orgReset = document.getElementById('btnOriginReset');
+    if (orgReset) orgReset.addEventListener('click', function () {
+      setOrigin(DEFAULT_ORIGIN.lon, DEFAULT_ORIGIN.lat, true);
+      toast('原点已恢复默认');
+    });
+
+    var laneIn = document.getElementById('inpLane');
+    if (laneIn) laneIn.addEventListener('change', function () {
+      var v = parseFloat(inputVal('inpLane'));
+      if (!isFinite(v) || v < 0.2 || v > 100) { toast('作业行距应在 0.2 ~ 100 m 之间'); renderSettings(); return; }
+      settings.lane = v;
+      applySettings();
+      persist('作业行距 ' + v + ' m');
+    });
+
+    var wIn = document.getElementById('inpMowerW');
+    if (wIn) wIn.addEventListener('change', function () {
+      var v = parseFloat(inputVal('inpMowerW'));
+      if (!isFinite(v) || v < 0.2 || v > 100) { toast('作业宽度应在 0.2 ~ 100 m 之间'); renderSettings(); return; }
+      settings.mowerWidth = v;
+      applySettings();
+      persist('作业宽度 ' + v + ' m');
+    });
+
+    var saveBle = document.getElementById('btnSaveBle');
+    if (saveBle) saveBle.addEventListener('click', function () {
+      settings.bleNamePrefix = inputVal('inpNamePrefix');
+      settings.bleServiceUuid = inputVal('inpSvcUuid');
+      settings.bleWriteUuid = inputVal('inpWriteUuid');
+      settings.bleNotifyUuid = inputVal('inpNotifyUuid');
+      saveSettings();
+      var ok = Bridge.post('setBleConfig', {
+        namePrefix: settings.bleNamePrefix,
+        serviceUuid: settings.bleServiceUuid,
+        writeUuid: settings.bleWriteUuid,
+        notifyUuid: settings.bleNotifyUuid
+      });
+      toast(ok ? 'BLE 标识已保存到 App，下次扫描立即生效'
+        : (hasNative() ? (Bridge.lastError || '原生拒绝保存') : '已存在本机（浏览器里不会真正生效）'));
+      renderSettings();
+    });
+
+    var clearT = document.getElementById('btnClearTiles');
+    if (clearT) clearT.addEventListener('click', function () {
+      resetTiles();
+      reviveTiles(true);
+      toast('瓦片缓存已清除，正在重新加载');
+      renderSettings();
+      refresh();
+    });
+
+    var demoA = document.getElementById('btnDemoAreas');
+    if (demoA) demoA.addEventListener('click', function () {
+      seedDemoAreas();
+      toast('已恢复 3 块示例地块');
+      renderSettings();
+      refresh();
+    });
+
+    var wipe = document.getElementById('btnWipeAreas');
+    if (wipe) wipe.addEventListener('click', function () {
+      state.areas = [];
+      state.seq = 0;
+      state.path = [];
+      state.planLength = 0;
+      state.sent = false;
+      clearDraft();
+      toast('已清空所有区域');
+      renderSettings();
+      refresh();
+    });
+
+    var rAll = document.getElementById('btnResetAll');
+    if (rAll) rAll.addEventListener('click', function () {
+      settings = JSON.parse(JSON.stringify(SETTINGS_DEFAULT));
+      CONFIG.origin.lon = DEFAULT_ORIGIN.lon;
+      CONFIG.origin.lat = DEFAULT_ORIGIN.lat;
+      applySettings();
+      resetTiles();
+      cam.lon = DEFAULT_ORIGIN.lon;
+      cam.lat = DEFAULT_ORIGIN.lat;
+      cam.zoom = 18;
+      syncScale();
+      saveSettings();
+      toast('已恢复出厂设置');
+      renderSettings();
+      refresh();
+    });
+
+    var rowLast = document.getElementById('rowLastSend');
+    if (rowLast) rowLast.addEventListener('click', function () {
+      if (!lastSend) { toast('还没有下发过区域'); return; }
+      console.log('[bridge:last]', lastSend.json);
+      toast('上次下发 ' + lastSend.areas + ' 块 / ' + lastSend.bytes +
+        ' B\n（完整报文已打印到控制台）');
+    });
+  }
+
+  // 示例地块：矩形 / 圆形 / 多边形各一块，首屏就能看出「多区域」长什么样
+  function seedDemoAreas() {
+    function R(id, name, ci, r) {
+      var nr = normRect(r);
+      var pts = rectCorners(nr).map(function (p) {
+        return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+      });
+      return {
+        id: id, name: name, kind: 'rect', color: colorFor(ci), sent: false,
+        points: pts, areaM2: +polygonArea(pts).toFixed(1),
+        rect: { x0: +nr.x0.toFixed(2), y0: +nr.y0.toFixed(2), x1: +nr.x1.toFixed(2), y1: +nr.y1.toFixed(2) },
+        sizeM: { w: +(nr.x1 - nr.x0).toFixed(2), h: +(nr.y1 - nr.y0).toFixed(2) }
+      };
+    }
+    function C(id, name, ci, c) {
+      var pts = circleToPolygon(c, 64).map(function (p) {
+        return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) };
+      });
+      return {
+        id: id, name: name, kind: 'circle', color: colorFor(ci), sent: false,
+        points: pts, areaM2: +polygonArea(pts).toFixed(1),
+        center: { x: +c.x.toFixed(2), y: +c.y.toFixed(2) },
+        radiusM: +c.r.toFixed(2)
+      };
+    }
+    function P(id, name, ci, pts) {
+      var p2 = pts.map(function (p) { return { x: +p.x.toFixed(2), y: +p.y.toFixed(2) }; });
+      return {
+        id: id, name: name, kind: 'poly', color: colorFor(ci), sent: false,
+        points: p2, areaM2: +polygonArea(p2).toFixed(1)
+      };
+    }
+    state.areas = [
+      R('a1', '区域 1', 0, { x0: -54, y0: -48, x1: -10, y1: -8 }),          // 矩形：半个球场
+      C('a2', '区域 2', 1, { x: 20, y: -24, r: 19 }),                       // 圆形：果岭
+      P('a3', '区域 3', 2, [{ x: 30, y: 12 }, { x: 58, y: 8 },              // 多边形：不规则地块
+                            { x: 60, y: 36 }, { x: 34, y: 40 }, { x: 26, y: 26 }])
+    ];
+    state.seq = 3;
+    state.sent = false;
+    refresh();
+  }
+
+  // ============================================================
+  // 15. 原生 -> H5
+  // ============================================================
+  window.GolfApp = {
+    onTelemetry: function (t) {
+      if (typeof t.x === 'number') state.robot.x = t.x;
+      if (typeof t.y === 'number') state.robot.y = t.y;
+      if (typeof t.heading === 'number') state.robot.heading = t.heading;
+      if (typeof t.battery === 'number') state.robot.battery = t.battery;
+      // 能收到遥测就说明链路是通的。只在状态还没就绪时走一次状态机，
+      // 否则每一帧都会重渲染连接页和设置页。
+      if (conn.phase !== 'ready') {
+        applyConnection({ connected: true, phase: 'connected',
+          detail: t.detail || '基站 RTK 固定解' });
+      }
+      draw();
+    },
+    // RTK 定位：原生侧把 WGS84 经纬度推过来（不是米制）
+    onPosition: function (p) {
+      if (!p || typeof p.lon !== 'number' || typeof p.lat !== 'number') return;
+      stopDemoWalker();
+      setMyPos(p.lon, p.lat, p.accuracy, p.heading, 'rtk');
+    },
+    // 连接状态：统一交给连接页的状态机（状态栏、主按钮、设备列表一起更新），
+    // 未连接时也要把 detail 显示出来——原生给的是具体原因
+    //（"还没连上机器人" / "缺少蓝牙权限" / "未配置 BLE 标识"），
+    // 只显示一句"未连接"等于把排查线索丢了。
+    onConnection: function (c) { applyConnection(c); },
+
+    // 扫描到的设备列表。原生每发现一台就回推一次全量列表。
+    onScanResult: function (s) {
+      var list = (s && s.devices) || [];
+      conn.devices = [];
+      for (var i = 0; i < list.length; i++) {
+        var d = list[i] || {};
+        if (!d.id) continue;
+        conn.devices.push({
+          id: String(d.id),
+          name: d.name || '',
+          rssi: typeof d.rssi === 'number' ? d.rssi : null
+        });
+      }
+      if (conn.phase !== 'connecting' && conn.phase !== 'ready') conn.phase = 'scanning';
+      if (conn.devices.length) {
+        conn.detail = '找到 ' + conn.devices.length + ' 台设备，点一下即可连接';
+      }
+      renderConnect();
+    },
+
+    // 扫描结束（12 秒超时 / 用户点了停止）
+    onScanStopped: function (s) {
+      if (conn.phase === 'scanning' && !conn.devices.length) {
+        conn.phase = 'idle';
+        conn.detail = (s && s.detail) || '没找到机器人，请确认它已开机并靠近手机';
+      }
+      renderConnect();
+    },
+    onTaskState: function (s) {
+      state.running = !!(s && s.running);
+      refresh();
+    },
+    // 机器人端/算法服务算好的路径回传，覆盖本地预览
+    onCoveragePath: function (p) {
+      if (p && p.points && p.points.length > 1) {
+        state.path = p.points;
+        state.planLength = pathLength(state.path);
+        refresh();
+      }
+    },
+    // 原生侧告知原点（比如启动时同步机器人里的那个原点）
+    onOrigin: function (o) {
+      if (!o || typeof o.lon !== 'number' || typeof o.lat !== 'number') return;
+      CONFIG.origin.lon = o.lon;
+      CONFIG.origin.lat = o.lat;
+      refresh();
+    }
+  };
+
+  // 调试钩子：便于在控制台或自动化测试里验证投影、圈地与路径规划
+  window.GolfDebug = {
+    CONFIG: CONFIG, cam: cam, state: state,
+    proj: proj, unproj: unproj,
+    localToLonLat: localToLonLat, lonLatToLocal: lonLatToLocal,
+    llToScreen: llToScreen, screenToLL: screenToLL,
+    mToScreen: mToScreen, screenToM: screenToM,
+    buildCoveragePath: buildCoveragePath, buildMultiPath: buildMultiPath,
+    polygonArea: polygonArea, circleToPolygon: circleToPolygon, circleArea: circleArea,
+    pointInPolygon: pointInPolygon,
+    rdp: rdp, distToSeg: distToSeg, jsonBytes: jsonBytes, dedupe: dedupe,
+    simplifyTol: simplifyTol, selfIntersects: selfIntersects,
+    hexA: hexA, centroid: centroid,
+    rectCorners: rectCorners, normRect: normRect,
+    clonePt: clonePt, cloneRect: cloneRect, cloneCircle: cloneCircle,
+    hitRectCorner: hitRectCorner, hitRectInside: hitRectInside,
+    hitCircleCenter: hitCircleCenter, hitCircleEdge: hitCircleEdge,
+    hitEdgeMid: hitEdgeMid, nearestVertex: nearestVertex,
+    deleteVertex: deleteVertex, addVertexAt: addVertexAt, finishRect: finishRect,
+    dragCorner: dragCorner, afterVertexChange: afterVertexChange,
+
+    // 多区域
+    allAreas: allAreas, totalArea: totalArea, areaById: areaById,
+    activeKind: activeKind, activePoints: activePoints,
+    commitDraft: commitDraft, clearDraft: clearDraft, areaToDraft: areaToDraft,
+    draftValid: draftValid, draftToArea: draftToArea,
+    editArea: editArea, deleteArea: deleteArea, colorFor: colorFor,
+    renderAreaChips: renderAreaChips,
+
+    // 瓦片（放大不空白靠这几个）
+    tileCache: tileCache, getTile: getTile, readyTile: readyTile,
+    ancestorCrop: ancestorCrop, reviveTiles: reviveTiles,
+    tilesAllDead: tilesAllDead, maxTileZ: maxTileZ,
+    tileDrawStat: function () { return tileDrawStat; },
+    constants: {
+      TILE: TILE, MAXZ: MAXZ, FALLBACK_UP: FALLBACK_UP, FALLBACK_DOWN: FALLBACK_DOWN,
+      MAX_CONCURRENT: MAX_CONCURRENT, MAX_RETRY: MAX_RETRY
+    },
+    // tileHealth 是唯一实现，tileStats 是它的历史别名（老测试还在用）
+    tileHealth: tileHealth,
+    tileStats: function () { return tileHealth(); },
+    basemapWarning: basemapWarning, resetHealth: resetHealth,
+
+    setTool: setTool, syncSeg: syncSeg, undo: undo,
+    restoreRect: restoreRect, restorePoly: restorePoly, restoreCircle: restoreCircle,
+    niceStep: niceStep, zoomAt: zoomAt, syncScale: syncScale,
+    resize: resize, refresh: refresh, setMyPos: setMyPos,
+    stepRobot: stepRobot, startPress: startPress, clearPress: clearPress,
+    mpp: function () { return mpp; },
+    // 测试要用的作业参数一律从这里读，别在测试里抄一遍数字
+    coverageParams: function () {
+      return { lane: LANE, sample: SAMPLE, inset: INSET, mowerWidth: MOWER_WIDTH };
+    },
+    simplifyToLimit: simplifyToLimit,
+    MAX_AREA_POINTS: MAX_AREA_POINTS,
+
+    // 页面路由 / 连接页 / 设置页
+    showScreen: showScreen, screens: SCREENS,
+    screen: function () { return screenNow; },
+    conn: conn, renderConnect: renderConnect,
+    startScan: startScan, stopScan: stopScan, connectTo: connectTo,
+    applyConnection: applyConnection, disconnectRobot: disconnectRobot,
+    settings: function () { return settings; },
+    saveSettings: saveSettings, loadSettings: loadSettings, applySettings: applySettings,
+    renderSettings: renderSettings, setOrigin: setOrigin, seedDemoAreas: seedDemoAreas,
+    lastSend: function () { return lastSend; },
+    APP_VERSION: APP_VERSION,
+
+    // 底图清晰度（「卫星图破碎糊」就是这几个在决定）
+    tileZoom: tileZoom, qualityShift: qualityShift, snapPx: snapPx,
+    resetTiles: resetTiles, dpr: function () { return DPR; },
+    tileUrlFor: tileUrl,
+    config: function () { return CONFIG; },
+
+    size: function () { return { W: W, H: H }; }
+  };
+
+  window.addEventListener('resize', function () { resize(); refresh(); });
+
+  // 先恢复上次的设置再初始化界面：原点可能被用户改过，相机要跟着走
+  loadSettings();
+  applySettings();
+  cam.lon = CONFIG.origin.lon;
+  cam.lat = CONFIG.origin.lat;
+  resize();
+  syncSeg();
+  bindConnectEvents();
+  bindSettingsEvents();
+  showScreen('connect');        // 入场永远是连接页，连上才进规划
+  requestAnimationFrame(loop);
+
+  // 预置三块示例地块（矩形 / 圆形 / 多边形各一），进规划页就能看到「多区域」长什么样。
+  // 自己画会盖在上面；点「清空」或设置页「恢复示例」都能重来。
+  setTimeout(function () { seedDemoAreas(); }, 300);
+})();
+</script>
+</body>
+</html>

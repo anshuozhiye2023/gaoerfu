@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 用系统自带的 Material 主题，不引 androidx.appcompat：
+         整个工程零第三方依赖，首次构建只需下 AGP 本身，快且不容易坏。 -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#f5f7fa</item>
+        <item name="android:statusBarColor">#ffffff</item>
+        <item name="android:navigationBarColor">#ffffff</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- H5 会自己处理安全区（env(safe-area-inset-*)），所以这里不做 inset 处理 -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

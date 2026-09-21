@@ -1,0 +1,36 @@
+# ---- Gradle / Android 构建产物 ----
+android/.gradle/
+android/build/
+android/app/build/
+
+# 各人 SDK 路径不同，别提交
+android/local.properties
+
+# 正式签名：绝对不能进仓库
+*.jks
+*.keystore
+keystore.properties
+
+# ---- iOS ----
+# .xcodeproj 由 project.yml 生成，不提交（避免 pbxproj 合并冲突）
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/build/
+ios/DerivedData/
+ios/Pods/
+ios/*.xcarchive
+
+# ---- 打包出来的东西 ----
+dist/*.apk
+dist/*.aab
+dist/*.ipa
+
+# 验证截图（要留的话把这行删掉）
+dist/emu-*.png
+
+# ---- 编辑器 / 系统 ----
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

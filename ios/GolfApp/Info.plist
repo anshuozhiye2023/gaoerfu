@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
+    <key>CFBundleDisplayName</key>
+    <string>捡球机器人</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- ============ 权限说明：这三条不写，App 一调用就直接崩 ============
+         iOS 不是"拒绝"，是**进程直接终止**，而且日志只有一句
+         "This app has crashed because it attempted to access privacy-sensitive
+          data without a usage description"。所以这几条是硬性必需。 -->
+
+    <!-- 蓝牙（iOS 13+ 的正式键名，必须写「怎么用」而不是「为什么需要」） -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>用于连接捡球机器人，下发圈地区域与接收作业状态。</string>
+    <!-- iOS 12 及以下用的老键名，留着不碍事 -->
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>用于连接捡球机器人，下发圈地区域与接收作业状态。</string>
+
+    <!-- 定位：地图上显示当前位置，并在场地内找到机器人 -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>用于在地图上显示你的当前位置，方便对照场地圈定作业区域。</string>
+
+    <!-- ============ 界面 ============ -->
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>UIUserInterfaceStyle</key>
+    <string>Light</string>
+
+    <!-- 声明需要 BLE，App Store 会据此筛选设备 -->
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>bluetooth-le</string>
+    </array>
+
+    <!-- 底图源允许用户自填，现场的离线地图/内网 GeoServer 常常只有 http——
+         按 iOS 默认策略会被静默拦截（现象和「源填错」一模一样），所以放行明文。
+         若日后要上 App Store，审核会要求解释：理由写「用户自定义内网瓦片源」。
+         与 Android 侧 network_security_config.xml 的取舍保持一致。 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

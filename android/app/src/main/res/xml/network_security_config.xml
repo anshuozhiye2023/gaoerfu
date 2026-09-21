@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置 —— 这里放行明文 HTTP，是一个**权衡后的决定**，不是疏忽。
+
+  为什么需要：
+    底图源允许用户在设置里自己填（because Esri 在部分网络下会被拒/超时，
+    见 BUILD.md「底图被墙怎么办」）。而现场用的瓦片服务经常是自建的
+    —— 树莓派上的离线地图、球场机房里的 GeoServer、内网 NAS 上的切片，
+    这些几乎只提供 http。public 地图服务则都是 https。
+    如果按 Android 默认禁掉明文，用户填了 http://192.168.x.x/... 会**静默不出图**，
+    现象和「源填错了」「服务没开」完全一样，现场没法排查。
+
+  为什么不写 <domain> 白名单：
+    <domain> 只做主机名精确/后缀匹配，**不支持 CIDR 网段**（写 192.168.0.0 只会匹配
+    这个具体地址，匹配不了整个网段）。而用户会填什么地址我们事先不知道，
+    逐条列举在原理上就不可能。所以只能整体放行。
+
+  代价（要清楚）：
+    App 允许明文流量 → 同一网络里的攻击者可以窃听/篡改 http 的瓦片与接口响应。
+    影响面：底图是公开影像，被篡改的后果有限；但**机器人控制指令不应该走明文**。
+    机器人走 BLE，不经网络，所以当前风险可控。
+
+  上架前建议（二选一）：
+    a) 把 base-config 改回 cleartextTrafficPermitted="false"，
+       并引导用户一律使用 https 瓦片源（推荐）；
+    b) 若必须支持内网 http，则在下面补 <domain> 白名单，并在 App 里
+       只接受白名单内的地址，把「自由填写」改成「从预置列表里选」。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

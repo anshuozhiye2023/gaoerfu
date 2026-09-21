@@ -1,0 +1,25 @@
+// 仓库全部指向阿里云镜像，直连 dl.google.com / repo1.maven.org 在国内常年不通。
+// 顺序有意义：镜像在前，官方在后（镜像缺件时兜底，且镜像会缓存官方构件）。
+pluginManagement {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'GolfRobotApp'
+include ':app'
