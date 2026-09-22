@@ -3,28 +3,83 @@
 ## 〇、总览
 
 ```
-你 push 代码 → GitHub 云端 Mac 自动编译 → 下载「未签名 ipa」
+你 push 代码 → 云端 Mac 自动编译 → 下载「未签名 ipa」
     → Windows 上用 Sideloadly 签上你的 Apple ID → 数据线装进 iPhone
 ```
 
 编译环节完全自动化；签名环节目前必须在你自己的 Windows 上做一次（几分钟），
 原因见 §四「为什么签名不放进 CI」。
 
-## 一、把仓库推上 GitHub（一次性）
+**只有 GitHub 提供免费的 macOS 构建环境**，这一点查过国内三家的官方文档：
+
+| 平台 | 托管构建环境 | 能不能编 iOS |
+|---|---|---|
+| **GitHub Actions** | Linux / Windows / **macOS**（免费额度内） | **能** |
+| Gitee Go | 只有 Linux 容器（可自建 Windows/macOS 执行器） | ✗（官方无 macOS） |
+| 腾讯云 CODING | 官方云主机只有 Linux；macOS 需自接节点，且 **2025-01-01 起已停止新增自定义节点接入** | ✗ |
+| 阿里云效 Flow | macOS 只存在于「私有构建集群」＝你自己得有一台 Mac 接进去 | ✗ |
+
+所以想免 Mac，编译这一步只能落在 GitHub 上。但**仓库可以放 Gitee**——见下面的 B 方案。
+
+## 一、把仓库推上去（一次性）
+
+### A. 只用 GitHub（最省事）
 
 ```bash
 cd GolfAppNative
 git init                                  # 本机已经执行过，重复执行无害
-git add -A
-git commit -m "iOS 云端编译流水线"
 
-# 在 github.com 上新建一个**私有**仓库（不要选初始化 README），然后：
+# 在 github.com 上新建一个**私有**空仓库（不要勾初始化 README），然后：
 git remote add origin https://github.com/<你的用户名>/<仓库名>.git
 git branch -M main
 git push -u origin main
 ```
 
 > **务必建私有仓库**——里面是产品源码。
+> 另外提醒额度：私有仓库的 **macOS 构建按 10 倍折算**（跑 4 分钟计 40 分钟），
+> 免费 2000 分钟/月 ≈ **200 分钟 macOS**，按每次构建 4–6 分钟算，够每月三四十次。
+> 公开仓库虽然不限量，但代码就公开了，不建议。
+
+### B. Gitee 当主仓 + GitHub 只当编译机（国内推送快，推荐给你）
+
+GitHub 在国内 push/pull 慢是老问题；但**编译在云端跑，跟你的网络无关**，
+只影响你 push 那一下。所以让两边各司其职：
+
+```bash
+cd GolfAppNative
+
+# Gitee 建私有仓库，当日常主仓（pull/push 都是国内线路，快）
+git remote add gitee git@gitee.com:<你的用户名>/<仓库名>.git
+
+# GitHub 建私有空仓库，只负责编译
+git remote add github https://github.com/<你的用户名>/<仓库名>.git
+
+git push -u gitee main
+git push -u github main
+
+# 以后一条命令双推（在 Bash/Git Bash 里执行）
+./push.sh "改了什么"
+```
+
+`push.sh` 已经放在仓库根目录了，它做的事就是「add → commit → 同时推 gitee 和 github」。
+不想用脚本，也可以配置一个 git 别名：
+
+```bash
+git config alias.pushall '!git push gitee main && git push github main'
+# 之后：git pushall
+```
+
+**想更省事（Gitee 会员/企业版）**：Gitee 仓库的「管理 → 仓库镜像管理」能把代码
+**自动推送到 GitHub**，连上面那条双推命令都可以省掉。个人版是否开放这项要看当前套餐，
+没有就继续用双推，一样自动化。
+
+**GitHub 直连慢的话**，给这个仓库单独走你的代理（本机 2336）：
+
+```bash
+git config http.https://github.com.proxy http://127.0.0.1:2336
+# SSH 方式则在 ~/.ssh/config 里给 github.com 配 ProxyCommand
+```
+
 
 ## 二、看编译结果
 
