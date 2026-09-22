@@ -14,7 +14,9 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # macos-14 上只有 Xcode 15.4；macos-15 默认 Xcode 16.4，且镜像更新更勤。
+    # 配合 project.yml 里的 projectFormat: xcode15_3，两边都不会被"工程格式太新"卡住。
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 

@@ -15,6 +15,18 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: false
 
+  # 生成的 .xcodeproj 用哪个 Xcode 的工程格式。
+  #
+  # ⚠ 别删这一行。XcodeGen 的默认值会跟着它自己的版本一路往前涨
+  #   （2.46 默认 xcode16_0 → objectVersion 77），而 CI runner 上的 Xcode
+  #   未必跟得上，于是报一句很难读的错：
+  #     "The project 'GolfApp' cannot be opened because it is in a future
+  #      Xcode project file format (77)"
+  #   注意它是 **xcodebuild 读工程时才炸**，xcodegen 那一步会显示成功，
+  #   第一眼很容易以为是 yml 写错了。
+  # 锁在 15.3 格式：Xcode 15.3 到 16.x 都能打开，本地有 Mac 时也不挑。
+  projectFormat: xcode15_3
+
 settings:
   base:
     # 换场地/换公司时改这两个
