@@ -151,7 +151,8 @@ push 之后：
 |---|---|---|
 | `xcodegen generate` 报 yml 语法错 | `project.yml` 写错了 | 本地装 XcodeGen 复现一遍再修 |
 | `xcodebuild: error: Unable to read project ... future Xcode project file format (77)` | XcodeGen 生成的工程格式新过 runner 上的 Xcode。注意这个错是 **xcodebuild 读工程时**才炸，xcodegen 那一步会显示 `Created project at ...` 一切正常，极易误判 | `project.yml` 里 `options.projectFormat: xcode15_3` 已经锁死，**别删这一行** |
-| Swift 编译错（带文件名与行号） | 代码问题 | 按行号改完 push 即可 |
+| `unterminated string literal` + `cannot find ')' to match opening '(' in string interpolation` | Swift 的普通 `"..."` **不能跨行**（要跨行必须用三引号），而代码里把多行字典直接塞进了 `\(...)`。**报错行号指向字符串起点，不是真正出错的那几行**，照行号去看容易改错地方 | 先把文案/字典算成变量，再拼单行 JS。改完本地跑 `python tools/swiftstr.py ios` 扫一遍，归零再 push |
+| 其他 Swift 编译错（带文件名与行号） | 代码问题 | 按行号改完 push 即可 |
 
 ## 三、把 ipa 装进 iPhone（免费 Apple ID 路线）
 

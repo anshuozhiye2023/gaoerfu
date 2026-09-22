@@ -292,11 +292,15 @@ final class BleBridge: NSObject {
             guard let self = self else { return }
             self.stopScan(announce: false)
             if self.peripheral == nil {
-                self.emitToApp("onScanStopped(\(self.json([
-                    "detail": self.found.isEmpty
-                        ? "没找到机器人，请确认它已开机并靠近手机"
-                        : "搜索结束，发现 \(self.found.count) 台设备"
-                ])))")
+                // 先把文案算好再拼 JS。Swift 的普通字符串字面量**不能跨行**，
+                // 直接把多行字典塞进 "\(...)" 里会报
+                //   error: unterminated string literal
+                //   error: cannot find ')' to match opening '(' in string interpolation
+                // 而且行号指向字符串起点，不指向真正出错的那几行，很容易看错地方。
+                let detail = self.found.isEmpty
+                    ? "没找到机器人，请确认它已开机并靠近手机"
+                    : "搜索结束，发现 \(self.found.count) 台设备"
+                self.emitToApp("onScanStopped(\(self.json(["detail": detail])))")
             }
         }
         scanTimer = task
@@ -309,9 +313,8 @@ final class BleBridge: NSObject {
         scanTimer = nil
         central.stopScan()
         if announce {
-            emitToApp("onScanStopped(\(json([
-                "detail": found.isEmpty ? "已停止搜索" : "已停止搜索，共发现 \(found.count) 台"
-            ])))")
+            let detail = found.isEmpty ? "已停止搜索" : "已停止搜索，共发现 \(found.count) 台"
+            emitToApp("onScanStopped(\(json(["detail": detail])))")
         }
     }
 
@@ -437,15 +440,19 @@ final class BleBridge: NSObject {
     /// 这些**进度**和「连接失败」这个**错误**在 H5 侧长得一模一样，界面只能一律
     /// 显示"未连接"，用户根本不知道它到底在干活还是已经挂了。
     private func emitConnection(_ phase: String, _ detail: String) {
-        emitToApp("onConnection(\(json(["phase": phase,
-                                        "connected": phase == "connected",
-                                        "detail": detail])))")
+        let payload: [String: Any] = [
+            "phase": phase,
+            "connected": phase == "connected",
+            "detail": detail
+        ]
+        emitToApp("onConnection(\(json(payload)))")
     }
 
     private func emitError(type: String, msg: String) {
         print("[GolfBLE] 错误[\(type)] \(msg)")
-        emitToApp("onConnection(\(json(["phase": "error", "connected": false,
-                                        "detail": msg, "from": type])))")
+        let payload: [String: Any] = ["phase": "error", "connected": false,
+                                      "detail": msg, "from": type]
+        emitToApp("onConnection(\(json(payload)))")
     }
 
     private func json(_ o: [String: Any]) -> String {
