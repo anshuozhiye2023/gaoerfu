@@ -1,0 +1,218 @@
+name: release-testflight
+
+# 把包签名后上传到 App Store Connect → TestFlight。
+#
+# 为什么单独一个 workflow、而且只手动触发：
+#   · 它需要 6 个仓库 Secret（证书、描述文件、API Key），没配之前跑必然红，
+#     挂在 push 上只会天天刷失败通知。
+#   · 上传会占用构建号（CFBundleVersion 一旦用过就不能重复），不该由 push 顺手触发。
+#
+# ── 上传前必须准备好的 6 个 Repository Secrets ──────────────────────────────
+#   ASC_KEY_ID                  App Store Connect API Key 的 Key ID
+#   ASC_ISSUER_ID               同一个 Key 的 Issuer ID
+#   ASC_KEY_CONTENT             AuthKey_XXXX.p8 的 base64（`base64 -w0 AuthKey_*.p8`）
+#   TEAM_ID                     10 位 Team ID（developer.apple.com → Membership）
+#   DIST_CERT_P12_BASE64        Apple Distribution 证书 .p12 的 base64
+#   DIST_CERT_PASSWORD          导出 .p12 时设的密码
+#   PROVISIONING_PROFILE_BASE64 App Store 类型描述文件的 base64
+#
+# ── 全程不需要 Mac ─────────────────────────────────────────────────────────
+#   证书走 Windows 上的 OpenSSL CSR 流程申请（见 TESTFLIGHT-NO-MAC.md），
+#   App Store Connect 的网页操作在任何浏览器里都能做，
+#   编译、签名、上传三件事都发生在这个 macOS runner 上。
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: '构建号 CFBundleVersion（不填则用 run_number，保证不重复）'
+        required: false
+        default: ''
+
+jobs:
+  release:
+    runs-on: macos-26          # 必须是 Xcode 26：Apple 自 2026-04-28 起拒收旧 SDK 的包
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── 缺失检查放在最前面 ──────────────────────────────────────────────
+      # 后面的步骤要解密证书、archive 十几分钟，才在最后一步因为少个 Key 失败
+      # 就太亏了。这里 5 秒内把问题说清楚。
+      - name: 检查必需的 Secrets 是否齐全
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          missing=0
+          for v in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_CONTENT TEAM_ID \
+                   DIST_CERT_P12_BASE64 DIST_CERT_PASSWORD PROVISIONING_PROFILE_BASE64; do
+            if [ -z "${!v}" ]; then
+              echo "::error::缺少 Secret: $v（见 TESTFLIGHT-NO-MAC.md 的清单）"
+              missing=1
+            else
+              echo "✓ $v 已配置"
+            fi
+          done
+          exit $missing
+
+      - name: 准备签名材料
+        env:
+          ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+          DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          # 1) 上传用的 API Key
+          mkdir -p ~/private_keys
+          printf '%s' "$ASC_KEY_CONTENT" | base64 --decode > ~/private_keys/AuthKey.p8
+          chmod 600 ~/private_keys/AuthKey.p8
+
+          # 2) 描述文件：文件名必须是它的 UUID，否则 Xcode 找不到
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          printf '%s' "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
+            > /tmp/profile.mobileprovision
+
+          # 3) 临时钥匙串
+          #    别用默认的 login 钥匙串：runner 是一次性的，但导入会改它的状态，
+          #    而且 unlock 行为在非交互 shell 里很难预测。独立钥匙串最省事。
+          KEYCHAIN="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          printf '%s' "$DIST_CERT_P12_BASE64" | base64 --decode > /tmp/dist.p12
+          security import /tmp/dist.p12 -k "$KEYCHAIN" \
+            -P "$DIST_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          # 不加这条，codesign 会弹「是否允许访问钥匙串」而 CI 上无人可点，
+          # 表现是 archive 卡住直到超时。这是最经典的坑。
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          security default-keychain -s "$KEYCHAIN"
+
+          echo "可用签名身份："
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+          # 顺手把 UUID 导出去给后面步骤用（PROFILE_UUID）
+          security cms -D -i /tmp/profile.mobileprovision > /tmp/profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' /tmp/profile.plist)
+          cp /tmp/profile.mobileprovision \
+             ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID".mobileprovision
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "描述文件 UUID: $PROFILE_UUID"
+          /usr/libexec/PlistBuddy -c 'Print Name' /tmp/profile.plist
+
+      - name: 生成 Xcode 工程
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ANALYTICS: 1
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          cd ios && xcodegen generate
+
+      # 构建号必须每次递增且不能重复用过：App Store Connect 里
+      # 「版本号 + 构建号」是一对唯一键，撞了直接报 "already exists"。
+      # 默认取 run_number，天然单调递增。
+      - name: 归档（Release / App Store 分发签名）
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+          BN="${BUILD_NUMBER:-${{ github.run_number }}}"
+          echo "本次构建号: $BN"
+          cd ios
+
+          # 签名方式用命令行参数覆盖，project.yml 里保持 Automatic —— 本地开发
+          # 只要在 Xcode 里登录一次账号就能直接跑，不用改成 Manual 那套。
+          xcodebuild archive \
+            -project GolfApp.xcodeproj \
+            -scheme GolfApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/GolfApp.xcarchive" \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            MARKETING_VERSION=1.0.0 \
+            CURRENT_PROJECT_VERSION="$BN" \
+            > archive.log 2>&1 || {
+              echo "❌ archive 失败，error 行："
+              grep -nE "error:|fatal error:" archive.log | head -40 || true
+              tail -40 archive.log
+              exit 1
+            }
+          echo "✓ archive 成功"
+
+      - name: 导出签名 ipa
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${{ secrets.TEAM_ID }}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.golfrobot.pickapp</key><string>$PROFILE_UUID</string>
+            </dict>
+            <key>uploadSymbols</key><true/>
+            <key>stripSwiftSymbols</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          cd ios
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/GolfApp.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates
+
+          IPA=$(find "$RUNNER_TEMP/export" -name "*.ipa" | head -1)
+          echo "IPA_PATH=$IPA" >> "$GITHUB_ENV"
+          ls -lh "$IPA"
+          # 签名是否真的生效：没签的包上传必被拒，这里提前看一眼
+          unzip -p "$IPA" "Payload/GolfApp.app/embedded.mobileprovision" > /dev/null \
+            && echo "✓ 包内已嵌描述文件（确认已签名）"
+
+      - name: 留一份签名 ipa 作为 artifact
+        # 上传失败时可以手动从浏览器补传（走 App Store Connect API），
+        # 不用为了同一个包再跑一次十几分钟的构建。
+        uses: actions/upload-artifact@v4
+        with:
+          name: GolfApp-signed-ipa-${{ github.run_number }}
+          path: ${{ env.IPA_PATH }}
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: 上传到 TestFlight
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          brew list fastlane >/dev/null 2>&1 || brew install fastlane
+          cd ios
+          fastlane pilot upload \
+            --ipa "$IPA_PATH" \
+            --api_key_path "$HOME/private_keys/AuthKey.p8" \
+            --api_key "$ASC_KEY_ID" \
+            --api_issuer "$ASC_ISSUER_ID" \
+            --skip_waiting_for_build_processing true
+          echo "✓ 已递交 App Store Connect，稍后到 TestFlight 页面看「正在处理」→「可供测试」"

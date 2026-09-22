@@ -20,6 +20,22 @@ ios/DerivedData/
 ios/Pods/
 ios/*.xcarchive
 
+# iOS 签名材料：同样是绝对不能进仓库的东西。
+# 私钥一旦推上去，等于把「以你名义签名 App」的能力公开了。
+# 注意 *.key 这条要留着 —— 申请证书时 openssl genrsa 生成的私钥就叫这个名字，
+# 而 Apple 那边只存证书不存私钥，丢了只能吊销重签。
+*.p12
+*.key
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+# 准备 Secrets 时 base64 出来的中间文件
+*.b64
+asc_key.b64
+cert.b64
+profile.b64
+
 # ---- 打包出来的东西 ----
 dist/*.apk
 dist/*.aab

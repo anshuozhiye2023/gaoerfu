@@ -14,9 +14,13 @@ on:
 
 jobs:
   build:
-    # macos-14 上只有 Xcode 15.4；macos-15 默认 Xcode 16.4，且镜像更新更勤。
-    # 配合 project.yml 里的 projectFormat: xcode15_3，两边都不会被"工程格式太新"卡住。
-    runs-on: macos-15
+    # ⚠ 必须是 macos-26（默认 Xcode 26.x）。
+    #   Apple 自 2026-04-28 起要求所有上传到 App Store Connect 的包必须由
+    #   Xcode 26 + iOS 26 SDK 构建，旧 SDK 的包**自动拒收、无宽限期**。
+    #   原来跑 macos-15（默认 Xcode 16.4）出的包，走 TestFlight 会在上传那一步
+    #   被直接打回，所以这里跟到底线版本。
+    #   注意：macos-14 镜像从 2026-07 起已进入弃用流程，别再往回退。
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -35,10 +39,12 @@ jobs:
           xcodegen generate
           xcodebuild -list
 
-      # 守卫：XcodeGen 的 `info:` 段语义是「生成 plist」，会把手写的 Info.plist
-      # 覆盖成只含 properties 的版本。权限键丢了编译照样通过，只有装到真机
-      # 才暴露（蓝牙一调就闪退 / http 离线瓦片源被 ATS 静默拦掉）。
-      # 这里显式断言，让回归在 CI 上直接红，而不是到了场地才发现。
+      # 守卫三条，都是「编译能过、但到 App Store 那一步才炸」的坑，让它提前在 CI 红：
+      #   1. Info.plist 权限键 —— XcodeGen 的 `info:` 段会把手写 plist 覆盖掉，
+      #      症状是装真机后蓝牙一调就闪退 / http 离线瓦片源被 ATS 静默拦掉。
+      #   2. Xcode 大版本 —— App Store 强制 Xcode 26 + iOS 26 SDK，跑在旧镜像上
+      #      出的包会在上传时被自动拒收，不看日志根本想不到是编译机的问题。
+      #   3. App 图标 —— 缺 AppIcon 编译完全不报错，只在上传校验时报 ITMS-90022。
       - name: 校验 Info.plist 关键权限键
         run: |
           PLIST=ios/GolfApp/Info.plist
@@ -49,7 +55,8 @@ jobs:
             NSLocationWhenInUseUsageDescription \
             NSAppTransportSecurity \
             UILaunchScreen \
-            UIRequiredDeviceCapabilities
+            UIRequiredDeviceCapabilities \
+            ITSAppUsesNonExemptEncryption
           do
             if /usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" >/dev/null 2>&1; then
               echo "✓ $k"
@@ -59,6 +66,34 @@ jobs:
             fi
           done
           exit $fail
+
+      - name: 守卫：Xcode 大版本 ≥ 26（Apple SDK 硬性要求）
+        run: |
+          MAJOR=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          echo "当前 Xcode 大版本: $MAJOR"
+          if [ "$MAJOR" -lt 26 ]; then
+            echo "::error::App Store 自 2026-04-28 起只接受 Xcode 26 / iOS 26 SDK 构建的包。"
+            echo "::error::请确认 runs-on 仍是 macos-26，或显式 xcode-select 到 Xcode 26。"
+            exit 1
+          fi
+
+      - name: 守卫：部署目标 ≥ iOS 15（Xcode 26 支持范围下限）
+        run: |
+          TGT=$(grep -A2 'deploymentTarget' ios/project.yml | grep -oE '[0-9]+\.[0-9]+' | head -1)
+          echo "project.yml 里的 iOS 部署目标: $TGT"
+          MINS=$(( ${TGT%%.*} * 100 + ${TGT##*.} ))
+          if [ "$MINS" -lt 1500 ]; then
+            echo "::error::Xcode 26 支持的最低部署目标是 iOS 15.0，当前是 $TGT。"
+            exit 1
+          fi
+
+      - name: 守卫：AppIcon 存在（缺了只在 App Store 上传时才报错）
+        run: |
+          ICONSET=ios/GolfApp/Assets.xcassets/AppIcon.appiconset
+          test -f "$ICONSET/Contents.json" || { echo "::error::缺 $ICONSET/Contents.json"; exit 1; }
+          N=$(ls "$ICONSET"/*.png 2>/dev/null | wc -l | tr -d ' ')
+          echo "AppIcon 里找到 $N 张 png"
+          test "$N" -ge 1 || { echo "::error::AppIcon 里没有 png（App Store 要求 1024×1024）"; exit 1; }
 
       # 未签名编译：CODE_SIGNING_ALLOWED=NO 让 CI 上没有证书也能出包。
       # 用 -scheme：XcodeGen 会为 target 自动生成同名 scheme（上面 -list 的

@@ -37,7 +37,13 @@
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>用于在地图上显示你的当前位置，方便对照场地圈定作业区域。</string>
 
-    <!-- ============ 界面 ============ -->
+    <!-- App Store Connect 的出口合规问卷。App 只用了系统自带的 HTTPS/BLE
+         加密，属于「豁免」范畴，写 false 之后每次上传都不再弹 Missing
+         Compliance，省掉一个必填卡点。 -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+
+    <!-- 界面 -->
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIRequiresFullScreen</key>
