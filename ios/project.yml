@@ -38,12 +38,20 @@ targets:
       #  - *.swift 自动编译
       #  - *.html 自动作为 resource 打进 .app（ViewController 靠 Bundle.main 读它）
       - path: GolfApp
-    info:
-      path: GolfApp/Info.plist
+        # 显式排掉 Info.plist：它由下面的 INFOPLIST_FILE 直接引用即可。
+        #
+        # ⚠ 千万不要改成 XcodeGen 的 `info:` 段。那个键的语义是
+        #「在这个路径**生成**一份 plist」，只会写入 properties 里的键，
+        #   于是 `xcodegen generate` 会把手写的 NSBluetooth*UsageDescription、
+        #   NSAppTransportSecurity、UILaunchScreen 等全部覆盖掉。
+        #   症状极具迷惑性：编译照样成功，但装到真机上
+        #     · 一调用蓝牙 → 进程直接闪退（缺权限描述是终止，不是弹窗拒绝）
+        #     · 用户自填的 http 离线瓦片源 → 被 ATS 静默拦掉，看起来像"源填错了"
+        excludes:
+          - "Info.plist"
     settings:
       base:
         INFOPLIST_FILE: GolfApp/Info.plist
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 # 图标：在 Xcode 里把 AppIcon 拖进 Assets.xcassets 即可（需要 1024×1024 那张）。
 # 没放图标也能编译和真机调试，只是不支持上架。

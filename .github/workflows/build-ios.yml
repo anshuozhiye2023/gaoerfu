@@ -22,11 +22,41 @@ jobs:
         run: xcodebuild -version
 
       - name: 生成 Xcode 工程（XcodeGen）
+        env:
+          # macOS runner 上 brew 的自动更新+清理比装包本身还慢，关掉省一两分钟
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_ANALYTICS: 1
         run: |
-          brew install xcodegen
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
           cd ios
           xcodegen generate
           xcodebuild -list
+
+      # 守卫：XcodeGen 的 `info:` 段语义是「生成 plist」，会把手写的 Info.plist
+      # 覆盖成只含 properties 的版本。权限键丢了编译照样通过，只有装到真机
+      # 才暴露（蓝牙一调就闪退 / http 离线瓦片源被 ATS 静默拦掉）。
+      # 这里显式断言，让回归在 CI 上直接红，而不是到了场地才发现。
+      - name: 校验 Info.plist 关键权限键
+        run: |
+          PLIST=ios/GolfApp/Info.plist
+          fail=0
+          for k in \
+            CFBundleDisplayName \
+            NSBluetoothAlwaysUsageDescription \
+            NSLocationWhenInUseUsageDescription \
+            NSAppTransportSecurity \
+            UILaunchScreen \
+            UIRequiredDeviceCapabilities
+          do
+            if /usr/libexec/PlistBuddy -c "Print :$k" "$PLIST" >/dev/null 2>&1; then
+              echo "✓ $k"
+            else
+              echo "✗ 缺键: $k  —— 检查 ios/project.yml 是否又启用了 info: 段"
+              fail=1
+            fi
+          done
+          exit $fail
 
       # 未签名编译：CODE_SIGNING_ALLOWED=NO 让 CI 上没有证书也能出包。
       # 不用 -scheme（XcodeGen 默认不一定生成 scheme），直接 -target 最稳。
@@ -63,6 +93,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: GolfApp-unsigned-ipa
+          # 带上 run 号，多次构建的包不会互相盖掉，下载时能对上是哪一次
+          name: GolfApp-unsigned-ipa-${{ github.run_number }}
           path: GolfApp-unsigned.ipa
           retention-days: 30
+          # 打包步骤万一静默没产出，这里直接红，避免"绿了但没包"
+          if-no-files-found: error
