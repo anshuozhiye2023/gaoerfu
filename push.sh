@@ -14,6 +14,14 @@
 
 set -euo pipefail
 
+# GCM（Git Credential Manager）是个独立进程，**不继承** git 的 http.proxy 配置，
+# 所以 GitHub 直连不通的机器上要额外用环境变量喂它一个代理：
+#   GITHUB_PROXY=http://127.0.0.1:2336 ./push.sh "改了什么"
+# 不设也能跑（凭据已存在 Windows 凭据管理器里时通常不需要联网）。
+if [ -n "${GITHUB_PROXY:-}" ]; then
+  export HTTPS_PROXY="$GITHUB_PROXY" HTTP_PROXY="$GITHUB_PROXY"
+fi
+
 MSG="${1:-update $(date '+%Y-%m-%d %H:%M')}"
 
 # 提醒：H5 改了要同步到两处原生副本，否则编出来的还是旧界面。

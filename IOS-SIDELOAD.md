@@ -89,7 +89,8 @@ https://github.com/anshuozhiye2023/gaoerfu.git      ← public，空仓
 本机已经做完的：
 - `git remote add github https://github.com/anshuozhiye2023/gaoerfu.git`（origin 没配）
 - 该仓库单独走代理：`git config http.https://github.com.proxy http://127.0.0.1:2336`
-- 仓库里 3 个 commit 待推送，`main` 分支，`git push github main` 即可
+- 浏览器授权已跑通（Git Credential Manager，账号 `anshuozhiye2023`，即仓库属主）
+- `main` 分支已推送，日常改动跑 `./push.sh "改了什么"` 即可
 
 **公开还是私有，这个仓库目前是 public，代价与收益摆一起：**
 
@@ -102,13 +103,32 @@ https://github.com/anshuozhiye2023/gaoerfu.git      ← public，空仓
 不管哪种，**别把 keystore / p12 / 描述文件 / 任何 token 提交进仓库**——`.gitignore` 已经挡了签名文件，
 但 token 得靠自己别写进代码。
 
-**认证方式（GitHub 从 2021 年起就不接受账号密码做 git 操作了，浏览器里存的密码没有用）：**
+**认证（2026-09-22 实测，浏览器授权这条路已经跑通，不需要手动生成 PAT）：**
 
-| 方式 | 你要做的 | 说明 |
+```bash
+cd GolfAppNative
+export HTTPS_PROXY=http://127.0.0.1:2336    # ← 必须，原因见下表
+git push github main
+```
+
+Git Credential Manager 会拉起浏览器；浏览器已登录 GitHub 的话点一下 Authorize 就完事，
+token 自动存进 Windows 凭据管理器，之后 push 不再打扰你。
+
+它拿到的 OAuth token 自带 `repo gist workflow` 三个 scope —— **`workflow` 是必需的**，
+否则 GitHub 会拒绝推送 `.github/workflows/` 下的文件；自己生成 PAT 时最容易漏勾这一项。
+
+**三个坑，都踩过一次了：**
+
+| 现象 | 原因 | 处理 |
 |---|---|---|
-| **PAT（推荐）** | Settings → Developer settings → Personal access tokens 生成，勾 `repo`（经典）或细粒度勾本仓库 Contents: Read and write | 走 HTTPS，稳；本机 SSH 22 端口对 GitHub 时通时断，别指望 |
-| **Deploy key** | 仓库 Settings → Deploy keys → Add，粘贴公钥并**勾上 Allow write access** | 作用域最小（只这一个仓库、只写），走 SSH |
-| 浏览器授权 | 在**你自己的终端**里跑 `git push github main`，弹窗点 Authorize | 本机装了 Git Credential Manager，这条路最省事，但必须在真实桌面会话里点 |
+| push 挂住几分钟不动，`tasklist` 里堆着 `git-credential-helper-sel` | PortableGit 的 **system 级** `credential.helper = helper-selector` 会弹 GUI 选择框，非交互 shell 里没人点就永久挂住。而且 `credential.helper` 是**多值**配置，命令行再写 `-c credential.helper=manager` 属于**追加**，selector 照样会跑一遍 | 用空值重置整个列表：<br>`git config --global credential.helper ""`<br>`git config --global --add credential.helper manager`<br>（本机已改，push 从 7 分钟变 3 秒） |
+| 浏览器授权页转圈 / GCM 连不上 GitHub | GCM 是**独立进程，不继承 git 的 `http.proxy`** | push 前 `export HTTPS_PROXY=http://127.0.0.1:2336` |
+| 换台机器后第一次 push 弹窗问选哪个凭据管理器 | 同第一条，selector 首次运行会询问并记录选择 | 同上，或在下拉里手动选 Git Credential Manager |
+
+> 另外两条路仍可用：**Deploy key**（仓库 Settings → Deploy keys，粘贴公钥并勾 Allow write access，
+> 作用域最小、只限这一个仓库）和 **PAT**（Settings → Developer settings → Personal access tokens，
+> 经典版勾 `repo` + `workflow`，或细粒度勾本仓库 Contents: Read and write）。
+> 本机 SSH 的 22 端口对 GitHub 时通时断，走 SSH 要有心理准备。
 
 
 ## 二、看编译结果
@@ -116,15 +136,22 @@ https://github.com/anshuozhiye2023/gaoerfu.git      ← public，空仓
 push 之后：
 
 1. 仓库页面 → **Actions** 标签 → 点最新一次 run；
-2. 全绿后页面右侧 **Artifacts** → 下载 `GolfApp-unsigned-ipa`；
+2. 全绿后页面右侧 **Artifacts** → 下载 `GolfApp-unsigned-ipa-<run号>`；
 3. 解压得到 `GolfApp-unsigned.ipa`。
 
-以后每次改 `ios/` 下的东西并 push，都会自动重新出包；也可以在
-Actions 页面右上角 **Run workflow** 手动触发。
+> ⚠ **第一次推送不会自动跑。** 如果 `build-ios.yml` 本身是这次 push 新增的文件，
+> GitHub 判定触发条件时看的是「push **之前**的默认分支」，那时默认分支上还没有这个
+> workflow，于是这一 push 静默不触发（Actions 页面看起来像没反应）。
+> **随便再推一次改动**，或者在 Actions 页面右上角点 **Run workflow**，就正常了。
+> 之后只要改 `ios/` 下的东西并 push 都会自动出包。
 
-编译失败先看日志的第一红行。常见两种：
-- `xcodegen generate` 报 yml 语法错 → 本地装 XcodeGen 复现一遍再修；
-- Swift 编译错 → 日志会给出文件与行号，改完 push 即可。
+编译失败先看日志的第一红行（点进失败的 job，展开红色那一步）。常见三种：
+
+| 日志里的关键行 | 原因 | 处理 |
+|---|---|---|
+| `xcodegen generate` 报 yml 语法错 | `project.yml` 写错了 | 本地装 XcodeGen 复现一遍再修 |
+| `xcodebuild: error: Unable to read project ... future Xcode project file format (77)` | XcodeGen 生成的工程格式新过 runner 上的 Xcode。注意这个错是 **xcodebuild 读工程时**才炸，xcodegen 那一步会显示 `Created project at ...` 一切正常，极易误判 | `project.yml` 里 `options.projectFormat: xcode15_3` 已经锁死，**别删这一行** |
+| Swift 编译错（带文件名与行号） | 代码问题 | 按行号改完 push 即可 |
 
 ## 三、把 ipa 装进 iPhone（免费 Apple ID 路线）
 
@@ -174,5 +201,15 @@ SideStore（AltStore 的去电脑化分支）连电脑都可以省，但配网�
 - **明文 http 放行**：底图源可自填，内网 http 瓦片服务不再被静默拦截
   （与 Android 的 `network_security_config.xml` 行为一致）；
 - **部署目标 iOS 14**：WKWebView + CoreBluetooth 够用，老机型也能装；
+- **工程格式锁在 15.3**（`options.projectFormat`）：不让 XcodeGen 的默认值随版本
+  往前漂，CI 和本地都不会被「工程格式太新」卡住；
+- **`project.yml` 里绝不能写 `info:` 段**：XcodeGen 里那个键的语义是「生成一份
+  plist 写到该路径」，会把 `Info.plist` 里手写的蓝牙权限、ATS 明文放行全部覆盖掉，
+  而编译**依然成功**，只有装到真机才暴露（蓝牙一调就闪退 / http 瓦片源被静默拦）。
+  CI 上有一条断言专门拦这个回归；
+- 工作流里有一条**包内 H5 校验**：解包 ipa 对比 `index.html` 的 SHA-256 与仓库一致，
+  防止哪天同步断链、编出一个旧版界面；
+- artifact 名带 run 号、打包步骤设了 `if-no-files-found: error`，
+  避免出现「流水线绿了但没产出包」这种最难查的状态。
 - 工作流里有一条**包内 H5 校验**：解包 ipa 对比 `index.html` 的 SHA-256 与仓库一致，
   防止哪天同步断链、编出一个旧版界面。

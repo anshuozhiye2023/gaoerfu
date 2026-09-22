@@ -61,18 +61,32 @@ jobs:
           exit $fail
 
       # 未签名编译：CODE_SIGNING_ALLOWED=NO 让 CI 上没有证书也能出包。
-      # 不用 -scheme（XcodeGen 默认不一定生成 scheme），直接 -target 最稳。
-      # 注意：Actions 默认 shell 没有 pipefail，不加上「编译失败但管道吃掉退出码」会假绿。
+      # 用 -scheme：XcodeGen 会为 target 自动生成同名 scheme（上面 -list 的
+      #   Schemes 段里能看到 GolfApp），这是 Xcode 16 推荐、也是唯一能和
+      #   -derivedDataPath 搭配的写法。
+      # ⚠ 别退回 `-target GolfApp -derivedDataPath build`：Xcode 15 上能跑，
+      #   Xcode 16 起直接报
+      #     "The flag -scheme, -testProductsPath, or -xctestrun is required
+      #      when specifying -derivedDataPath."
+      # 日志用文件接住再按需打印：直接 `| tail -40` 会把真正的 error 行截掉，
+      # 只留下末尾一堆无关输出，排查时最气人。
       - name: 编译（Release / 真机 arm64 / 未签名）
         run: |
-          set -o pipefail
           cd ios
-          xcodebuild -project GolfApp.xcodeproj \
-            -target GolfApp -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tail -40
+          if ! xcodebuild -project GolfApp.xcodeproj \
+                 -scheme GolfApp -configuration Release \
+                 -sdk iphoneos \
+                 -derivedDataPath build \
+                 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+                 build > build.log 2>&1; then
+            echo "❌ 编译失败。以下是全部 error 行："
+            grep -nE "error:|fatal error:|cannot find|undefined symbol" build.log | head -50 || true
+            echo "----- 日志最后 40 行 -----"
+            tail -40 build.log
+            exit 1
+          fi
+          echo "✓ 编译成功"
+          tail -5 build.log
 
       - name: 打包成 ipa
         run: |
