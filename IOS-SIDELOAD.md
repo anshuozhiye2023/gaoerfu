@@ -80,6 +80,36 @@ git config http.https://github.com.proxy http://127.0.0.1:2336
 # SSH 方式则在 ~/.ssh/config 里给 github.com 配 ProxyCommand
 ```
 
+### C. 当前这个项目用的仓库（已配好）
+
+```
+https://github.com/anshuozhiye2023/gaoerfu.git      ← public，空仓
+```
+
+本机已经做完的：
+- `git remote add github https://github.com/anshuozhiye2023/gaoerfu.git`（origin 没配）
+- 该仓库单独走代理：`git config http.https://github.com.proxy http://127.0.0.1:2336`
+- 仓库里 3 个 commit 待推送，`main` 分支，`git push github main` 即可
+
+**公开还是私有，这个仓库目前是 public，代价与收益摆一起：**
+
+| | 公开 | 私有 |
+|---|---|---|
+| Actions 额度 | **免费不限量**，macOS 也不计费 | 2000 分钟/月，且 macOS 按 10 倍折算 ≈ 200 分钟 |
+| 源码 | **全网可见、可被搜索、可被 fork** | 只有你可见 |
+
+换成私有：仓库 Settings → General → 最下面 Danger Zone → Change visibility（推代码之前换最干净）。
+不管哪种，**别把 keystore / p12 / 描述文件 / 任何 token 提交进仓库**——`.gitignore` 已经挡了签名文件，
+但 token 得靠自己别写进代码。
+
+**认证方式（GitHub 从 2021 年起就不接受账号密码做 git 操作了，浏览器里存的密码没有用）：**
+
+| 方式 | 你要做的 | 说明 |
+|---|---|---|
+| **PAT（推荐）** | Settings → Developer settings → Personal access tokens 生成，勾 `repo`（经典）或细粒度勾本仓库 Contents: Read and write | 走 HTTPS，稳；本机 SSH 22 端口对 GitHub 时通时断，别指望 |
+| **Deploy key** | 仓库 Settings → Deploy keys → Add，粘贴公钥并**勾上 Allow write access** | 作用域最小（只这一个仓库、只写），走 SSH |
+| 浏览器授权 | 在**你自己的终端**里跑 `git push github main`，弹窗点 Authorize | 本机装了 Git Credential Manager，这条路最省事，但必须在真实桌面会话里点 |
+
 
 ## 二、看编译结果
 
